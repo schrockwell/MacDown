@@ -127,6 +127,23 @@ else
     echo "==> Mini vMac placed at $MINIVMAC_APP"
 fi
 
+# Mini vMac boot disk. The SE FDHD build wants a System 6 or 7 floppy in
+# the same directory as the .app; this is a System 6.0.8 startup disk
+# from the Internet Archive.
+MINIVMAC_BOOT_URL="https://archive.org/download/mac_MacOS_6.0.8/MacOS_6.0.8_System_Startup.img"
+MINIVMAC_BOOT_DEST="$MINIVMAC_DIR/disk1.dsk"
+
+if [ -f "$MINIVMAC_BOOT_DEST" ]; then
+    echo "==> Mini vMac boot disk already present — skipping"
+else
+    TMPDSK="$(mktemp -t mvm_boot).dsk"
+    echo "==> Downloading Mini vMac boot disk (System 6.0.8, ~1.4 MB)"
+    curl --fail --location --progress-bar --output "$TMPDSK" "$MINIVMAC_BOOT_URL"
+    mv "$TMPDSK" "$MINIVMAC_BOOT_DEST"
+    xattr -c "$MINIVMAC_BOOT_DEST" 2>/dev/null || true
+    echo "==> Mini vMac boot disk placed at $MINIVMAC_BOOT_DEST"
+fi
+
 # Homebrew prerequisite check — informational only, we don't install anything
 REQUIRED_FORMULAE=(cmake gmp mpfr libmpc boost bison flex texinfo)
 MISSING=()
@@ -182,7 +199,7 @@ Current state:
   $(mark $SYSTEM753_PRESENT) deps/basiliskii/System753.dsk                (downloaded from archive.org)
   $(mark $SEFDHD_ROM_PRESENT) deps/minivmac/SEFDHD.ROM                     (downloaded from archive.org)
   $(mark $MINIVMAC_PRESENT) deps/minivmac/minivmac-macOS-SEFDHD.app      (downloaded from GitHub release)
-  $(mark $BOOTDISK_PRESENT) deps/minivmac/*.dsk (System boot disk)       (manual — Apple legacy downloads)
+  $(mark $BOOTDISK_PRESENT) deps/minivmac/disk1.dsk                     (System 6.0.8 — downloaded from archive.org)
 
 Remaining steps to finish setup
 ================================================================
