@@ -8,7 +8,8 @@
       "WebFetch(domain:68kmla.org)",
       "WebFetch(domain:henlin.net)",
       "WebFetch(domain:www.vogons.org)",
-      "WebFetch(domain:www.toughdev.com)"
+      "WebFetch(domain:www.toughdev.com)",
+      "Bash(git *)"
     ]
   }
 }

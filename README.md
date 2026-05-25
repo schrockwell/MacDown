@@ -2,6 +2,26 @@
 
 A reference guide and project template for building classic Macintosh (System 7, 68K) applications on modern Apple Silicon Macs using the Retro68 cross-compiler toolchain.
 
+## Using This for a New Project
+
+This repo is a template. If you're starting your own project, download a zip instead of cloning so you get a clean slate without our git history:
+
+1. Click **Code → Download ZIP** on GitHub, or:
+
+   ```bash
+   curl -L https://github.com/erikbuild/VibeRetro68/archive/refs/heads/main.zip -o VibeRetro68.zip
+   unzip VibeRetro68.zip
+   cd VibeRetro68-main
+   ```
+
+2. Initialize your own repo:
+
+   ```bash
+   git init
+   git add -A
+   git commit -m "Initial commit from VibeRetro68 template"
+   ```
+
 ## What's Here
 
 ```
