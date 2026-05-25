@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.9)
-project(MyApp C)
+project(MdEdit C)
 
-add_application(MyApp
+add_application(MdEdit
     src/main.c
-    resources/MyApp.r
+    src/document.c
+    src/file_io.c
+    src/markdown.c
+    src/apple_events.c
+    resources/MdEdit.r
+    CREATOR MDED
 )
