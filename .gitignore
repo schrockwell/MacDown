@@ -4,3 +4,8 @@ build/
 *.ROM
 *.app
 .DS_Store
+
+# External dependencies / build environment — gitignore everything except
+# each subdir's README. See deps/<name>/README.md for what lives there.
+/deps/*/*
+!/deps/*/README.md

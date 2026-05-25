@@ -54,10 +54,14 @@ brew install cmake gmp mpfr libmpc boost bison flex texinfo
 
 ### Clone (if not already done)
 
+From the project root:
+
 ```bash
-cd ~/Code
-git clone --recursive https://github.com/autc04/Retro68.git
+git clone --recursive https://github.com/autc04/Retro68.git deps/retro68/Retro68
 ```
+
+The toolchain lives under `deps/retro68/` — a gitignored project subdirectory.
+See [../deps/retro68/README.md](../deps/retro68/README.md).
 
 The `--recursive` flag is critical — it pulls the `multiversal` submodule
 (open-source reimplementation of Apple's Universal Interfaces).
@@ -65,8 +69,8 @@ The `--recursive` flag is critical — it pulls the `multiversal` submodule
 ### Build (68K only)
 
 ```bash
-mkdir -p ~/Code/Retro68-build
-cd ~/Code/Retro68-build
+mkdir -p deps/retro68/Retro68-build
+cd deps/retro68/Retro68-build
 ../Retro68/build-toolchain.bash --no-ppc --clean-after-build
 ```
 
@@ -82,14 +86,14 @@ cd ~/Code/Retro68-build
 ### Verify the Build
 
 ```bash
-~/Code/Retro68-build/toolchain/bin/m68k-apple-macos-gcc --version
+deps/retro68/Retro68-build/toolchain/bin/m68k-apple-macos-gcc --version
 ```
 
 ### Toolchain File Location
 
 After building, the CMake toolchain file lives at:
 ```
-~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 ```
 
 ## Header/Interface Options
@@ -106,7 +110,7 @@ More complete, but cannot be redistributed. To install from the MPW 3.5
 Golden Master disk image:
 
 ```bash
-cd ~/Code/Retro68-build
+cd deps/retro68/Retro68-build
 ../Retro68/interfaces-and-libraries.sh ./toolchain /path/to/MPW-GM.img.bin
 ```
 
@@ -133,8 +137,8 @@ cmake_minimum_required(VERSION 3.9)
 project(MyApp C)
 
 add_application(MyApp
-    SOURCES main.c
-    RESOURCES MyApp.r
+    main.c
+    MyApp.r
 )
 ```
 
@@ -148,9 +152,11 @@ Rez → produce all four output formats.
 
 ### Building a Project
 
+From the project root:
+
 ```bash
 mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 make
 ```
 
@@ -176,25 +182,29 @@ The Retro68 source tree includes working examples in its `Samples/` directory:
 
 Build all samples:
 ```bash
-cd ~/Code/Retro68-build
+cd deps/retro68/Retro68-build
 make
 ```
 
 ## Environment Variables
 
-Add to `~/.zshrc` for convenience:
+For convenience inside a shell session rooted in the project, export:
 
 ```bash
-export RETRO68_TOOLCHAIN="$HOME/Code/Retro68-build/toolchain"
+export RETRO68_TOOLCHAIN="$PWD/deps/retro68/Retro68-build/toolchain"
 export PATH="$RETRO68_TOOLCHAIN/bin:$PATH"
 ```
+
+These are intentionally not added to `~/.zshrc` — different VibeRetro68
+checkouts may pin different Retro68 versions, so binding the env var to
+`$HOME` would be wrong. Re-export per shell or use a tool like `direnv`.
 
 ## Rebuilding After Changes
 
 If you only changed Retro68's own tools (not GCC/binutils):
 
 ```bash
-cd ~/Code/Retro68-build
+cd deps/retro68/Retro68-build
 ../Retro68/build-toolchain.bash --no-ppc --skip-thirdparty
 ```
 

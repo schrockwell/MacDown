@@ -1,0 +1,46 @@
+diff --git a/ConvertObj/CMakeLists.txt b/ConvertObj/CMakeLists.txt
+index 3c9fc300b4..dc296238f0 100644
+--- a/ConvertObj/CMakeLists.txt
++++ b/ConvertObj/CMakeLists.txt
+@@ -1,4 +1,4 @@
+-find_package(Boost COMPONENTS filesystem system REQUIRED)
++find_package(Boost COMPONENTS filesystem REQUIRED)
+ 
+ add_executable(ConvertObj ConvertObj.cc)
+ target_link_libraries(ConvertObj ResourceFiles ${Boost_LIBRARIES})
+diff --git a/PEFTools/CMakeLists.txt b/PEFTools/CMakeLists.txt
+index 0abf399596..717ede94e4 100644
+--- a/PEFTools/CMakeLists.txt
++++ b/PEFTools/CMakeLists.txt
+@@ -1,4 +1,4 @@
+-find_package(Boost COMPONENTS filesystem system REQUIRED)
++find_package(Boost COMPONENTS filesystem REQUIRED)
+ 
+ add_executable(MakePEF MakePEF.cc rs6000.h PEF.h)
+ 
+diff --git a/ResourceFiles/CMakeLists.txt b/ResourceFiles/CMakeLists.txt
+index 443f8a0d00..77ff67fa2a 100644
+--- a/ResourceFiles/CMakeLists.txt
++++ b/ResourceFiles/CMakeLists.txt
+@@ -15,7 +15,7 @@
+ #   You should have received a copy of the GNU General Public License
+ #   along with Retro68.  If not, see <http://www.gnu.org/licenses/>.
+ 
+-find_package(Boost COMPONENTS filesystem system REQUIRED)
++find_package(Boost COMPONENTS filesystem REQUIRED)
+ 
+ add_library(ResourceFiles
+     ResourceFork.h ResourceFork.cc
+diff --git a/Rez/CMakeLists.txt b/Rez/CMakeLists.txt
+index e34ce8944c..7721c81a78 100644
+--- a/Rez/CMakeLists.txt
++++ b/Rez/CMakeLists.txt
+@@ -15,7 +15,7 @@
+ #   You should have received a copy of the GNU General Public License
+ #   along with Retro68.  If not, see <http://www.gnu.org/licenses/>.
+ 
+-find_package(Boost COMPONENTS wave filesystem system thread regex program_options)
++find_package(Boost COMPONENTS wave filesystem thread regex program_options)
+ 
+ # Look for bison.
+     # We need Version 3, and Mac OS X still comes with an outdated version (2.3).

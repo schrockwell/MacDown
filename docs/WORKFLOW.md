@@ -17,7 +17,7 @@ for testing.
  │                                                     │
  └────────────────┬────────────────────────────────────┘
                   │
-                  │  .bin copied to ~/Code/Basilisk II/shared/
+                  │  .bin copied to deps/basiliskii/shared/
                   ▼
  ┌─────────────────────────────────────────────────────┐
  │                  Basilisk II                        │
@@ -35,7 +35,7 @@ for testing.
 2. **Claude builds** — `cmake --build build/` from the project directory
 3. **Claude deploys** — copies the `.bin` file to the Basilisk II shared folder:
    ```bash
-   cp build/MyApp.bin ~/Code/Basilisk\ II/shared/
+   cp build/MyApp.bin deps/basiliskii/shared/
    ```
 4. **Claude reads output** — compiler warnings, errors, linker messages
 5. **You test** — switch to Basilisk II, open the app from the shared
@@ -47,7 +47,7 @@ for testing.
 
 From the project root:
 ```bash
-cmake --build build/ && cp build/MyApp.bin "$HOME/Code/Basilisk II/shared/"
+cmake --build build/ && cp build/MyApp.bin "deps/basiliskii/shared/"
 ```
 
 Claude can run this as a single command to build and deploy in one step.
@@ -80,10 +80,8 @@ cmake_minimum_required(VERSION 3.9)
 project(MyApp C)
 
 add_application(MyApp
-    SOURCES
-        src/main.c
-    RESOURCES
-        resources/MyApp.r
+    src/main.c
+    resources/MyApp.r
 )
 ```
 
@@ -91,7 +89,7 @@ add_application(MyApp
 
 ```bash
 mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 ```
 
 After this, `cmake --build build/` is all Claude needs to run.
@@ -119,10 +117,10 @@ inside the emulated Mac if you link with the console library:
 
 ```cmake
 add_application(MyApp
-    SOURCES src/main.c
-    RESOURCES resources/MyApp.r
+    src/main.c
+    resources/MyApp.r
+    CONSOLE
 )
-target_link_libraries(MyApp RetroConsole)
 ```
 
 ### Systematic Bug Hunting

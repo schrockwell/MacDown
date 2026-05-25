@@ -4,9 +4,10 @@
 
 set -e
 
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="${1:-MyApp}"
-BUILD_DIR="build"
-SHARED_DIR="$HOME/Code/Basilisk II/shared"
+BUILD_DIR="$PROJECT_ROOT/build"
+SHARED_DIR="$PROJECT_ROOT/deps/basiliskii/shared"
 
 cmake --build "$BUILD_DIR"
 

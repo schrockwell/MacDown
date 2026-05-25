@@ -25,13 +25,22 @@ This repo is a template. If you're starting your own project, download a zip ins
 ## What's Here
 
 ```
+src/                    Your project source (C/C++) — create as needed
+resources/              Rez resource definitions (.r files) — create as needed
 docs/
   RETRO68_SETUP.md      Toolchain installation and configuration
   EMULATOR_SETUP.md     Basilisk II and Mini vMac setup
   WORKFLOW.md           Iterative dev workflow with Claude Code
 scripts/
-  build-and-deploy.sh   Build and copy artifact to Basilisk II shared folder
+  fetch-deps.sh         Download Retro68 source, emulators, ROMs into deps/
+  build-retro68.sh      Build the Retro68 cross-compiler (~30-60 min, one-time)
+  doctor.sh             Diagnose missing or misconfigured pieces of deps/
+  build-and-deploy.sh   Build the project and copy artifact to Basilisk II shared folder
+deps/                   Retro68 toolchain + emulators (gitignored — see deps/*/README.md)
 ```
+
+Put your source files under `src/`. The template's CMakeLists.txt and
+`scripts/build-and-deploy.sh` both assume that layout.
 
 ## Quick Start
 
@@ -41,13 +50,16 @@ scripts/
 brew install cmake gmp mpfr libmpc boost bison flex texinfo
 ```
 
-### Build Retro68 (one-time, ~30-60 min)
+### Fetch Sources and Build Retro68
 
 ```bash
-git clone --recursive https://github.com/autc04/Retro68.git ~/Code/Retro68
-mkdir ~/Code/Retro68-build && cd ~/Code/Retro68-build
-../Retro68/build-toolchain.bash --no-ppc --clean-after-build
+scripts/fetch-deps.sh       # downloads Retro68 source, emulators, ROMs
+scripts/build-retro68.sh    # builds the toolchain (~30-60 min, one-time)
+scripts/doctor.sh           # verifies the install
 ```
+
+The `deps/` directory is gitignored — every clone builds its own
+toolchain. See [deps/retro68/README.md](deps/retro68/README.md) for layout.
 
 ### Start a New Project
 
@@ -58,8 +70,8 @@ cmake_minimum_required(VERSION 3.9)
 project(MyApp C)
 
 add_application(MyApp
-    SOURCES src/main.c
-    RESOURCES resources/MyApp.r
+    src/main.c
+    resources/MyApp.r
 )
 ```
 
@@ -67,7 +79,7 @@ Configure and build:
 
 ```bash
 mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 make
 ```
 
@@ -76,20 +88,22 @@ make
 Copy the `.bin` output to the Basilisk II shared folder:
 
 ```bash
-cp build/MyApp.bin ~/Code/Basilisk\ II/shared/
+cp build/MyApp.bin deps/basiliskii/shared/
 ```
 
 The file appears on the emulated Mac's desktop as a mounted volume.
 
 ## Toolchain
 
+All toolchain components live under `deps/retro68/` (gitignored — every clone builds its own).
+
 | Component | Location |
 |-----------|----------|
-| Retro68 source | `~/Code/Retro68` |
-| Build output / toolchain | `~/Code/Retro68-build/toolchain/` |
-| CMake toolchain file | `~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake` |
-| Basilisk II | `~/Code/Basilisk II/` |
-| Mini vMac | `roms/minivmac-macOS-SEFDHD.app` |
+| Retro68 source | `deps/retro68/Retro68/` |
+| Build output / toolchain | `deps/retro68/Retro68-build/toolchain/` |
+| CMake toolchain file | `deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake` |
+| Basilisk II | `deps/basiliskii/` |
+| Mini vMac | `deps/minivmac/minivmac-macOS-SEFDHD.app` |
 
 ## Documentation
 
