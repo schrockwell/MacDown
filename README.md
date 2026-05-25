@@ -1,6 +1,6 @@
 # VibeRetro68
 
-A reference guide and project template for building classic Macintosh (System 7, 68K) applications on modern Apple Silicon Macs using the Retro68 cross-compiler toolchain.
+A reference guide and project template for building classic Macintosh (System 6 and 7, 68K) applications on modern Apple Silicon Macs using the Retro68 cross-compiler toolchain.
 
 ## Using This for a New Project
 
@@ -27,6 +27,7 @@ This repo is a template. If you're starting your own project, download a zip ins
 ```
 src/                    Your project source (C/C++) — create as needed
 resources/              Rez resource definitions (.r files) — create as needed
+Brewfile                Homebrew prerequisites (cmake, boost, flex, …)
 docs/
   RETRO68_SETUP.md      Toolchain installation and configuration
   EMULATOR_SETUP.md     Basilisk II and Mini vMac setup
@@ -41,16 +42,9 @@ scripts/
 deps/                   Retro68 toolchain + emulators (gitignored — see deps/*/README.md)
 ```
 
-Put your source files under `src/`. The template's CMakeLists.txt and
-`scripts/run-basiliskii.sh` both assume that layout.
+Put your source files under `src/`.
 
 ## Quick Start
-
-### Prerequisites
-
-```bash
-brew install cmake gmp mpfr libmpc boost bison flex texinfo
-```
 
 ### One-shot setup
 
@@ -58,13 +52,17 @@ brew install cmake gmp mpfr libmpc boost bison flex texinfo
 scripts/setup.sh
 ```
 
-That runs the three sub-steps in order:
+That runs the four sub-steps in order:
 
-| Step | Script | What it does |
-|------|--------|--------------|
-| 1 | `fetch-deps.sh` | Clone Retro68, download emulator binaries, ROMs, and the System 7.5.3 disk image into `deps/` |
-| 2 | `build-retro68.sh` | Build the Retro68 toolchain (~30-60 min, one-time) and configure the project's `build/` against it |
-| 3 | `doctor.sh` | Verify every piece is in place; exits non-zero on any failure |
+| Step | What it does |
+|------|--------------|
+| 1. `brew bundle` | Install the Homebrew formulae listed in [Brewfile](Brewfile) (cmake, boost, flex, etc.) |
+| 2. `fetch-deps.sh` | Clone Retro68, download emulator binaries, ROMs, and the System 7.5.3 disk image into `deps/` |
+| 3. `build-retro68.sh` | Build the Retro68 toolchain (~30-60 min, one-time) and configure the project's `build/` against it |
+| 4. `doctor.sh` | Verify every piece is in place; exits non-zero on any failure |
+
+Homebrew itself is required up front — `setup.sh` errors out with
+install instructions if `brew` isn't on `PATH`.
 
 Each sub-script is idempotent, so `setup.sh` is safe to re-run after a
 partial install or a `git pull` that adds new deps. You can also invoke

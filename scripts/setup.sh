@@ -16,11 +16,27 @@ section() {
     echo "================================================================"
 }
 
-section "1/3  Fetching dependencies"
+section "1/4  Installing Homebrew prerequisites"
+if ! command -v brew >/dev/null 2>&1; then
+    cat >&2 <<EOF
+Homebrew is not installed.
+
+Install it with:
+  /bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+Then re-run scripts/setup.sh.
+EOF
+    exit 1
+fi
+# brew bundle is a no-op for formulae that are already installed, so
+# re-running setup.sh is cheap. Edit ./Brewfile to add deps.
+brew bundle install --file="$PROJECT_ROOT/Brewfile"
+
+section "2/4  Fetching dependencies"
 "$PROJECT_ROOT/scripts/fetch-deps.sh"
 
-section "2/3  Building Retro68 toolchain"
+section "3/4  Building Retro68 toolchain"
 "$PROJECT_ROOT/scripts/build-retro68.sh"
 
-section "3/3  Running doctor"
+section "4/4  Running doctor"
 "$PROJECT_ROOT/scripts/doctor.sh"
