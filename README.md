@@ -28,6 +28,7 @@ This repo is a template. If you're starting your own project, download a zip ins
 src/                    Your project source (C/C++) — create as needed
 resources/              Rez resource definitions (.r files) — create as needed
 Brewfile                Homebrew prerequisites (cmake, boost, flex, …)
+Makefile                Task runner — shortcuts for the scripts/ commands
 docs/
   RETRO68_SETUP.md      Toolchain installation and configuration
   EMULATOR_SETUP.md     Basilisk II and Mini vMac setup
@@ -49,7 +50,7 @@ Put your source files under `src/`.
 ### One-shot setup
 
 ```bash
-scripts/setup.sh
+make setup
 ```
 
 That runs the four sub-steps in order:
@@ -57,16 +58,16 @@ That runs the four sub-steps in order:
 | Step | What it does |
 |------|--------------|
 | 1. `brew bundle` | Install the Homebrew formulae listed in [Brewfile](Brewfile) (cmake, boost, flex, etc.) |
-| 2. `fetch-deps.sh` | Clone Retro68, download emulator binaries, ROMs, and the System 7.5.3 disk image into `deps/` |
-| 3. `build-retro68.sh` | Build the Retro68 toolchain (~30-60 min, one-time) and configure the project's `build/` against it |
-| 4. `doctor.sh` | Verify every piece is in place; exits non-zero on any failure |
+| 2. `make fetch-deps` | Clone Retro68, download emulator binaries, ROMs, and the System 7.5.3 disk image into `deps/` |
+| 3. `make build-retro68` | Build the Retro68 toolchain (~30-60 min, one-time) and configure the project's `build/` against it |
+| 4. `make doctor` | Verify every piece is in place; exits non-zero on any failure |
 
-Homebrew itself is required up front — `setup.sh` errors out with
+Homebrew itself is required up front — `make setup` errors out with
 install instructions if `brew` isn't on `PATH`.
 
-Each sub-script is idempotent, so `setup.sh` is safe to re-run after a
+Every target is idempotent, so `make setup` is safe to re-run after a
 partial install or a `git pull` that adds new deps. You can also invoke
-any sub-script directly if you only need that step.
+any sub-target directly if you only need that step.
 
 The `deps/` directory is gitignored — every clone builds its own
 toolchain. See [deps/retro68/README.md](deps/retro68/README.md) for layout.
@@ -85,9 +86,9 @@ add_application(MyApp
 )
 ```
 
-No separate CMake-configure step needed — `scripts/build-retro68.sh`
+No separate CMake-configure step needed — `make build-retro68`
 configures `build/` against the toolchain on its way out. If you ever
-delete `build/`, just re-run `scripts/build-retro68.sh` and it'll
+delete `build/`, just re-run `make build-retro68` and it'll
 reconfigure (the toolchain build itself is already cached).
 
 ### Edit → Build → Run
@@ -95,24 +96,27 @@ reconfigure (the toolchain build itself is already cached).
 Pick the emulator that fits the moment:
 
 ```bash
-scripts/run-basiliskii.sh    # System 7.5.3 / Quadra 950 — interactive testing
-scripts/run-minivmac.sh      # Mac SE FDHD — fast, minimal, drag-disk workflow
+make basiliskii    # System 7.5.3 / Quadra 950 — interactive testing
+make minivmac      # Mac SE FDHD — fast, minimal, drag-disk workflow
 ```
 
-Each script does `cmake --build build/` first, then hands off to the emulator:
+Run `make` with no arguments to see every available target.
 
-- **`run-basiliskii.sh`** drops the freshly-built `.bin` into
+Each target does `cmake --build build/` first, then hands off to the emulator:
+
+- **`make basiliskii`** drops the freshly-built `.bin` into
   `deps/basiliskii/shared/` and launches Basilisk II if it isn't already
   running. Basilisk II's shared folder is `extfs`-synced live, so a
   running emulator picks up the new `.bin` automatically — no restart
   needed when iterating.
-- **`run-minivmac.sh`** kills any running Mini vMac, then relaunches it
+- **`make minivmac`** kills any running Mini vMac, then relaunches it
   with the fresh `MyApp.dsk` (or whatever `.dsk` your build produced).
   The kill-first ordering matters: Mini vMac mmaps the disk image, and
   overwriting it under a live emulator corrupts the resource fork.
 
-Optional arg picks a specific app name when you have multiple outputs:
-`scripts/run-basiliskii.sh MyApp` or `scripts/run-minivmac.sh MyApp`.
+To pick a specific app when you have multiple outputs, invoke the
+underlying script directly: `scripts/run-basiliskii.sh MyApp` or
+`scripts/run-minivmac.sh MyApp`.
 
 ### Testing on Real Hardware
 
