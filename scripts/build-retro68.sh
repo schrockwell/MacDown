@@ -24,9 +24,29 @@ if [ ! -d "$RETRO68_SRC/.git" ]; then
     exit 1
 fi
 
+CMAKE_TC="$BUILD_DIR/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake"
+PROJECT_BUILD="$PROJECT_ROOT/build"
+
+# Configure the project's build/ directory against the freshly-built
+# toolchain. Skipped if there's no CMakeLists.txt at the project root
+# (template-only checkout) or if build/ has already been configured.
+configure_project_build() {
+    if [ ! -f "$PROJECT_ROOT/CMakeLists.txt" ]; then
+        return
+    fi
+    if [ -f "$PROJECT_BUILD/CMakeCache.txt" ]; then
+        echo "==> Project build/ already configured — skipping cmake configure"
+        return
+    fi
+    echo "==> Configuring project build/ with the Retro68 toolchain"
+    mkdir -p "$PROJECT_BUILD"
+    (cd "$PROJECT_BUILD" && cmake "$PROJECT_ROOT" -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TC")
+}
+
 if [ -x "$GCC" ]; then
     echo "==> Toolchain already built ($("$GCC" --version | head -1))"
     echo "    Delete $BUILD_DIR to force a clean rebuild."
+    configure_project_build
     exit 0
 fi
 
@@ -65,8 +85,7 @@ Toolchain installed at:
 For convenience in this shell session:
     export RETRO68_TOOLCHAIN="$BUILD_DIR/toolchain"
     export PATH="\$RETRO68_TOOLCHAIN/bin:\$PATH"
-
-Then point CMake at the toolchain file:
-    -DCMAKE_TOOLCHAIN_FILE=$BUILD_DIR/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 ================================================================
 EOF
+
+configure_project_build

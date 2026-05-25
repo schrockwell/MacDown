@@ -32,6 +32,7 @@ docs/
   EMULATOR_SETUP.md     Basilisk II and Mini vMac setup
   WORKFLOW.md           Iterative dev workflow with Claude Code
 scripts/
+  setup.sh              One-shot: fetch-deps → build-retro68 → doctor
   fetch-deps.sh         Download Retro68 source, emulators, ROMs into deps/
   build-retro68.sh      Build the Retro68 cross-compiler (~30-60 min, one-time)
   doctor.sh             Diagnose missing or misconfigured pieces of deps/
@@ -51,20 +52,30 @@ Put your source files under `src/`. The template's CMakeLists.txt and
 brew install cmake gmp mpfr libmpc boost bison flex texinfo
 ```
 
-### Fetch Sources and Build Retro68
+### One-shot setup
 
 ```bash
-scripts/fetch-deps.sh       # downloads Retro68 source, emulators, ROMs
-scripts/build-retro68.sh    # builds the toolchain (~30-60 min, one-time)
-scripts/doctor.sh           # verifies the install
+scripts/setup.sh
 ```
+
+That runs the three sub-steps in order:
+
+| Step | Script | What it does |
+|------|--------|--------------|
+| 1 | `fetch-deps.sh` | Clone Retro68, download emulator binaries, ROMs, and the System 7.5.3 disk image into `deps/` |
+| 2 | `build-retro68.sh` | Build the Retro68 toolchain (~30-60 min, one-time) and configure the project's `build/` against it |
+| 3 | `doctor.sh` | Verify every piece is in place; exits non-zero on any failure |
+
+Each sub-script is idempotent, so `setup.sh` is safe to re-run after a
+partial install or a `git pull` that adds new deps. You can also invoke
+any sub-script directly if you only need that step.
 
 The `deps/` directory is gitignored — every clone builds its own
 toolchain. See [deps/retro68/README.md](deps/retro68/README.md) for layout.
 
 ### Start a New Project
 
-Create a `CMakeLists.txt`:
+Create a `CMakeLists.txt` at the project root:
 
 ```cmake
 cmake_minimum_required(VERSION 3.9)
@@ -76,23 +87,34 @@ add_application(MyApp
 )
 ```
 
-Configure and build:
+No separate CMake-configure step needed — `scripts/build-retro68.sh`
+configures `build/` against the toolchain on its way out. If you ever
+delete `build/`, just re-run `scripts/build-retro68.sh` and it'll
+reconfigure (the toolchain build itself is already cached).
+
+### Edit → Build → Run
+
+Pick the emulator that fits the moment:
 
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
-make
+scripts/run-basiliskii.sh    # System 7.5.3 / Quadra 950 — interactive testing
+scripts/run-minivmac.sh      # Mac SE FDHD — fast, minimal, drag-disk workflow
 ```
 
-### Test in Basilisk II
+Each script does `cmake --build build/` first, then hands off to the emulator:
 
-Copy the `.bin` output to the Basilisk II shared folder:
+- **`run-basiliskii.sh`** drops the freshly-built `.bin` into
+  `deps/basiliskii/shared/` and launches Basilisk II if it isn't already
+  running. Basilisk II's shared folder is `extfs`-synced live, so a
+  running emulator picks up the new `.bin` automatically — no restart
+  needed when iterating.
+- **`run-minivmac.sh`** kills any running Mini vMac, then relaunches it
+  with the fresh `HelloWorld.dsk` (or whatever `.dsk` your build produced).
+  The kill-first ordering matters: Mini vMac mmaps the disk image, and
+  overwriting it under a live emulator corrupts the resource fork.
 
-```bash
-cp build/MyApp.bin deps/basiliskii/shared/
-```
-
-The file appears on the emulated Mac's desktop as a mounted volume.
+Optional arg picks a specific app name when you have multiple outputs:
+`scripts/run-basiliskii.sh MyApp` or `scripts/run-minivmac.sh MyApp`.
 
 ## Toolchain
 
