@@ -107,7 +107,7 @@ Each script does `cmake --build build/` first, then hands off to the emulator:
   running emulator picks up the new `.bin` automatically — no restart
   needed when iterating.
 - **`run-minivmac.sh`** kills any running Mini vMac, then relaunches it
-  with the fresh `HelloWorld.dsk` (or whatever `.dsk` your build produced).
+  with the fresh `MyApp.dsk` (or whatever `.dsk` your build produced).
   The kill-first ordering matters: Mini vMac mmaps the disk image, and
   overwriting it under a live emulator corrupts the resource fork.
 
