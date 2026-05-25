@@ -114,6 +114,12 @@ Each script does `cmake --build build/` first, then hands off to the emulator:
 Optional arg picks a specific app name when you have multiple outputs:
 `scripts/run-basiliskii.sh MyApp` or `scripts/run-minivmac.sh MyApp`.
 
+### Testing on Real Hardware
+
+Mount `build/` over AFP on the classic Mac to easily run the compiled application.
+
+The [TashTalk USB](https://www.tindie.com/products/feralfirmware/tashtalk-usb/) device and [GUI interface](https://github.com/FeralFirmware/TailTalk/releases) are recommended.
+
 ## Toolchain
 
 All toolchain components live under `deps/retro68/` (gitignored — every clone builds its own).
