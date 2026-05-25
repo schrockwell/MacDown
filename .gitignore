@@ -1,0 +1,4 @@
+build/
+*.dsk
+*.bin
+.DS_Store
