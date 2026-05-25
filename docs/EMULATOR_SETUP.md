@@ -73,39 +73,45 @@ open ~/Code/Basilisk\ II/Basilisk\ II\ GUI\ -\ RUN\ ME.app
 
 ## Mini vMac — Automated Testing
 
-Mini vMac emulates a Macintosh Plus (68000). It's simpler than Basilisk II
-but supports automated launch-and-exit via LaunchAPPL.
+Mini vMac is a lightweight classic Mac emulator. Different builds target
+different Mac models. We use the SE FDHD build from
+https://github.com/erichelgeson/minivmac/releases/ which emulates a
+Macintosh SE with a 1.44 MB SuperDrive (FDHD = Floppy Disk High Density).
 
-**Location:** `~/Downloads/Mini vMac.app` (ARM64 native)
+**Location:** `roms/minivmac-macOS-SEFDHD.app`
 
 ### Requirements
 
-Mini vMac needs two files in the same directory as the app:
+Mini vMac needs two files in the **same directory** as the `.app` bundle:
 
-1. **`vMac.ROM`** — A Macintosh Plus ROM dump (128 KB)
+1. **ROM file** — named to match the build variant (e.g. `SEFDHD.ROM`)
 2. **A boot disk image** — System 6 or 7 boot floppy (`.dsk` or `.img`)
 
-### ROM File
+Both files and the app should live in the `roms/` directory.
 
-The ROM file must be named exactly `vMac.ROM` and placed next to the app:
-```
-~/Downloads/Mini vMac.app
-~/Downloads/vMac.ROM          ← Mac Plus ROM goes here
+### macOS Quarantine
+
+Downloaded ROMs and emulator apps will be quarantined by macOS, which
+silently prevents the emulator from reading the ROM. Clear it after
+downloading:
+
+```bash
+xattr -cr roms/SEFDHD.ROM roms/minivmac-macOS-SEFDHD.app
 ```
 
-Sources for a Mac Plus ROM (legally gray area — you should own the hardware):
-- Archive.org has various classic Mac ROM collections
-- If you have a physical Mac Plus, dump it with a ROM reader
+If Mini vMac says "I can not find the ROM image file" even though the file
+is right there, quarantine is almost certainly the cause.
 
 ### System Disk
 
 Mini vMac boots from a 1.44 MB or 800K floppy image. System 7.0.1 is freely
-available from Apple's legacy downloads:
-- Look for "System 7.0.1 System Startup" disk image
+available from Apple's legacy downloads. Place the boot disk in `roms/`:
 
-Place the boot disk next to the app:
 ```
-~/Downloads/disk1.dsk         ← boot floppy
+roms/
+├── minivmac-macOS-SEFDHD.app
+├── SEFDHD.ROM
+└── disk1.dsk
 ```
 
 Drag the disk image onto the Mini vMac window to "insert" it.
@@ -130,9 +136,9 @@ After building Retro68, configure `~/.LaunchAPPL.cfg`:
 Method=minivmac
 
 [minivmac]
-minivmac=/Users/erik/Downloads/Mini vMac.app/Contents/MacOS/minivmac
-rom=/Users/erik/Downloads/vMac.ROM
-systemImage=/Users/erik/Downloads/System7_boot.dsk
+minivmac=/Users/erik/Code/PrintWatch/roms/minivmac-macOS-SEFDHD.app/Contents/MacOS/minivmac
+rom=/Users/erik/Code/PrintWatch/roms/SEFDHD.ROM
+systemImage=/Users/erik/Code/PrintWatch/roms/disk1.dsk
 ```
 
 Then launch apps from the command line:

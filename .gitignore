@@ -1,4 +1,6 @@
 build/
 *.dsk
 *.bin
+*.ROM
+*.app
 .DS_Store

@@ -1,4 +1,4 @@
-# Classic Mac Development with Retro68
+# VibeRetro68
 
 A reference guide and project template for building classic Macintosh (System 7, 68K) applications on modern Apple Silicon Macs using the Retro68 cross-compiler toolchain.
 
@@ -69,7 +69,7 @@ The file appears on the emulated Mac's desktop as a mounted volume.
 | Build output / toolchain | `~/Code/Retro68-build/toolchain/` |
 | CMake toolchain file | `~/Code/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake` |
 | Basilisk II | `~/Code/Basilisk II/` |
-| Mini vMac | `~/Downloads/Mini vMac.app` |
+| Mini vMac | `roms/minivmac-macOS-SEFDHD.app` |
 
 ## Documentation
 

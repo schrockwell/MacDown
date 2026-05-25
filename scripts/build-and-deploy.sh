@@ -4,7 +4,7 @@
 
 set -e
 
-APP_NAME="${1:-PrintWatch}"
+APP_NAME="${1:-MyApp}"
 BUILD_DIR="build"
 SHARED_DIR="$HOME/Code/Basilisk II/shared"
 
