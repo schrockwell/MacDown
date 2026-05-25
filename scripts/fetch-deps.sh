@@ -52,6 +52,26 @@ BASILISKII_DIR="$PROJECT_ROOT/deps/basiliskii"
 MINIVMAC_DIR="$PROJECT_ROOT/deps/minivmac"
 mkdir -p "$BASILISKII_DIR/shared" "$MINIVMAC_DIR"
 
+# Basilisk II universal build (Emaculation's 2025-01-25 ARM/x86_64 binary).
+# Mirrored on cdn.schrockwell.com because emaculation.com sits behind a
+# Cloudflare JS challenge that refuses curl. Bump the date when a newer
+# build is desired.
+BASILISKII_URL="https://cdn.schrockwell.com/mac/BasiliskII_universal_20250125.zip"
+BASILISKII_APP="$BASILISKII_DIR/BasiliskII.app"
+
+if [ -d "$BASILISKII_APP" ]; then
+    echo "==> Basilisk II already present at $BASILISKII_APP — skipping"
+else
+    TMPZIP="$(mktemp -t basiliskii).zip"
+    echo "==> Downloading Basilisk II universal build (~3.4 MB)"
+    curl --fail --location --progress-bar --output "$TMPZIP" "$BASILISKII_URL"
+    # -x __MACOSX/* drops the AppleDouble cruft from the host-side macOS zip.
+    unzip -o -q "$TMPZIP" -d "$BASILISKII_DIR" -x "__MACOSX/*"
+    rm -f "$TMPZIP"
+    xattr -cr "$BASILISKII_APP" 2>/dev/null || true
+    echo "==> Basilisk II placed at $BASILISKII_APP"
+fi
+
 ROM_ARCHIVE_URL="https://archive.org/download/mac_rom_archive_-_as_of_8-19-2011/mac_rom_archive_-_as_of_8-19-2011.zip"
 
 QUADRA_ROM_IN_ARCHIVE="420DBFF3 - Quadra 700&900 & PB140&170.ROM"
@@ -194,7 +214,7 @@ Current state:
   [x] deps/retro68/README.md
   [x] deps/retro68/Retro68/                  (source cloned)
   $(mark $RETRO68_BUILT) deps/retro68/Retro68-build/            (toolchain — built by scripts/build-retro68.sh)
-  $(mark $BASILISK_PRESENT) deps/basiliskii/BasiliskII.app            (manual — Emaculation forum)
+  $(mark $BASILISK_PRESENT) deps/basiliskii/BasiliskII.app            (downloaded from cdn.schrockwell.com)
   $(mark $QUADRA_ROM_PRESENT) deps/basiliskii/Quadra.rom                   (downloaded from archive.org)
   $(mark $SYSTEM753_PRESENT) deps/basiliskii/System753.dsk                (downloaded from archive.org)
   $(mark $SEFDHD_ROM_PRESENT) deps/minivmac/SEFDHD.ROM                     (downloaded from archive.org)

@@ -8,26 +8,21 @@ Emaculation bundle plus the Quadra ROM. Everything except this README is
 
 ```
 deps/basiliskii/
-├── BasiliskII.app           (manual — Emaculation bundle)
+├── BasiliskII.app           (auto-downloaded by scripts/fetch-deps.sh)
 ├── Quadra.rom               (auto-downloaded by scripts/fetch-deps.sh)
 ├── System753.dsk            (auto-downloaded by scripts/fetch-deps.sh)
+├── prefs                    (written by scripts/run-basiliskii.sh)
 └── shared/                  (host↔guest file exchange)
 ```
 
 ## How to Populate
 
-1. **Emulator + disk images** — pre-configured bundle from the Emaculation
-   forum (no ROM):
+1. **Emulator** — auto-downloaded by `scripts/fetch-deps.sh`. We mirror
+   the Emaculation universal build at `cdn.schrockwell.com` because
+   emaculation.com sits behind a Cloudflare JS challenge that blocks
+   `curl`. Source page (manual download fallback):
 
        https://www.emaculation.com/forum/viewtopic.php?t=7361
-
-   Extract its contents into this directory. The zip wraps everything in
-   a top-level `Basilisk II/` folder, so after unzipping flatten it:
-
-   ```bash
-   unzip "/path/to/Basilisk II.zip" -d /tmp/
-   mv "/tmp/Basilisk II"/* deps/basiliskii/
-   ```
 
 2. **Quadra ROM** — auto-downloaded by `scripts/fetch-deps.sh`
    from the [Internet Archive Mac ROM archive][rom-archive] and placed
