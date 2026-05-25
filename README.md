@@ -35,12 +35,13 @@ scripts/
   fetch-deps.sh         Download Retro68 source, emulators, ROMs into deps/
   build-retro68.sh      Build the Retro68 cross-compiler (~30-60 min, one-time)
   doctor.sh             Diagnose missing or misconfigured pieces of deps/
-  build-and-deploy.sh   Build the project and copy artifact to Basilisk II shared folder
+  run-basiliskii.sh     Build, copy .bin to Basilisk II shared folder, launch the emulator
+  run-minivmac.sh       Build and (re)launch Mini vMac with the resulting .dsk
 deps/                   Retro68 toolchain + emulators (gitignored — see deps/*/README.md)
 ```
 
 Put your source files under `src/`. The template's CMakeLists.txt and
-`scripts/build-and-deploy.sh` both assume that layout.
+`scripts/run-basiliskii.sh` both assume that layout.
 
 ## Quick Start
 

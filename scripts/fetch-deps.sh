@@ -90,6 +90,23 @@ else
     echo "==> Both ROMs already present — skipping ROM download"
 fi
 
+# Mac OS 7.5.3 HDD image for Basilisk II. Apple released 7.5.3 as free
+# software in 1996; the Internet Archive hosts a ready-to-boot 200 MB
+# HFS disk image. The Emaculation BasiliskII bundle ships the emulator
+# but no disk images, so we supply one here.
+SYSTEM753_URL="https://archive.org/download/system-753/System753.dsk"
+SYSTEM753_DEST="$BASILISKII_DIR/System753.dsk"
+
+if [ -f "$SYSTEM753_DEST" ]; then
+    echo "==> Mac OS 7.5.3 disk image already present — skipping"
+else
+    TMPDSK="$(mktemp -t system753).dsk"
+    echo "==> Downloading Mac OS 7.5.3 disk image (~200 MB)"
+    curl --fail --location --progress-bar --output "$TMPDSK" "$SYSTEM753_URL"
+    mv "$TMPDSK" "$SYSTEM753_DEST"
+    echo "==> Mac OS 7.5.3 disk placed at $SYSTEM753_DEST"
+fi
+
 # Mini vMac SE FDHD build from erichelgeson/minivmac. Pinned to a known-good
 # release; bump the URL when a newer one is desired.
 MINIVMAC_URL="https://github.com/erichelgeson/minivmac/releases/download/2024.06.08/minivmac-macOS-SEFDHD.app.zip"
@@ -134,6 +151,9 @@ BASILISK_PRESENT=0
 QUADRA_ROM_PRESENT=0
 [ -f "$QUADRA_ROM_DEST" ] && QUADRA_ROM_PRESENT=1
 
+SYSTEM753_PRESENT=0
+[ -f "$SYSTEM753_DEST" ] && SYSTEM753_PRESENT=1
+
 SEFDHD_ROM_PRESENT=0
 [ -f "$SEFDHD_ROM_DEST" ] && SEFDHD_ROM_PRESENT=1
 
@@ -159,6 +179,7 @@ Current state:
   $(mark $RETRO68_BUILT) deps/retro68/Retro68-build/            (toolchain — built by scripts/build-retro68.sh)
   $(mark $BASILISK_PRESENT) deps/basiliskii/BasiliskII.app            (manual — Emaculation forum)
   $(mark $QUADRA_ROM_PRESENT) deps/basiliskii/Quadra.rom                   (downloaded from archive.org)
+  $(mark $SYSTEM753_PRESENT) deps/basiliskii/System753.dsk                (downloaded from archive.org)
   $(mark $SEFDHD_ROM_PRESENT) deps/minivmac/SEFDHD.ROM                     (downloaded from archive.org)
   $(mark $MINIVMAC_PRESENT) deps/minivmac/minivmac-macOS-SEFDHD.app      (downloaded from GitHub release)
   $(mark $BOOTDISK_PRESENT) deps/minivmac/*.dsk (System boot disk)       (manual — Apple legacy downloads)

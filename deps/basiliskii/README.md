@@ -8,13 +8,9 @@ Emaculation bundle plus the Quadra ROM. Everything except this README is
 
 ```
 deps/basiliskii/
-├── BasiliskII.app
-├── Basilisk II GUI - RUN ME.app
+├── BasiliskII.app           (manual — Emaculation bundle)
 ├── Quadra.rom               (auto-downloaded by scripts/fetch-deps.sh)
-├── HDD753.dsk               (Mac OS 7.5.3 boot disk)
-├── OS753InstallerParts.dsk
-├── DiskTools_MacOS8.image
-├── basilisk_ii_prefs.dotfile
+├── System753.dsk            (auto-downloaded by scripts/fetch-deps.sh)
 └── shared/                  (host↔guest file exchange)
 ```
 
@@ -39,7 +35,13 @@ deps/basiliskii/
 
        https://archive.org/details/mac_rom_archive_-_as_of_8-19-2011
 
-3. **Prefs file** — copy into place (Basilisk II reads it from `$HOME`):
+3. **System 7.5.3 disk image** — auto-downloaded by
+   `scripts/fetch-deps.sh` from the Internet Archive and placed at
+   `System753.dsk` (~200 MB). Source page:
+
+       https://archive.org/details/system-753
+
+4. **Prefs file** — copy into place (Basilisk II reads it from `$HOME`):
 
    ```bash
    cp deps/basiliskii/basilisk_ii_prefs.dotfile ~/.basilisk_ii_prefs

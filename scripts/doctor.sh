@@ -102,7 +102,7 @@ if [ -d "$DEPS/basiliskii/shared" ]; then
     check_pass "shared/ folder present (host↔guest exchange)"
 else
     check_warn "shared/ folder missing" \
-        "scripts/build-and-deploy.sh has nowhere to copy build artifacts"
+        "scripts/run-basiliskii.sh has nowhere to copy build artifacts"
 fi
 
 if [ -f "$HOME/.basilisk_ii_prefs" ]; then
