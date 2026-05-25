@@ -136,9 +136,9 @@ After building Retro68, configure `~/.LaunchAPPL.cfg`:
 Method=minivmac
 
 [minivmac]
-minivmac=/Users/erik/Code/PrintWatch/roms/minivmac-macOS-SEFDHD.app/Contents/MacOS/minivmac
-rom=/Users/erik/Code/PrintWatch/roms/SEFDHD.ROM
-systemImage=/Users/erik/Code/PrintWatch/roms/disk1.dsk
+minivmac=/path/to/VibeRetro68/roms/minivmac-macOS-SEFDHD.app/Contents/MacOS/minivmac
+rom=/path/to/VibeRetro68/roms/SEFDHD.ROM
+systemImage=/path/to/VibeRetro68/roms/disk1.dsk
 ```
 
 Then launch apps from the command line:

@@ -22,9 +22,9 @@ for testing.
  ┌─────────────────────────────────────────────────────┐
  │                  Basilisk II                        │
  │                                                     │
- │   5. Erik opens app from shared volume              │
- │   6. Tests the feature / reproduces the bug         │
- │   7. Reports observations back to Claude Code       │
+ │   5. You open the app from shared volume             │
+ │   6. Test the feature / reproduce the bug            │
+ │   7. Report observations back to Claude Code         │
  │                                                     │
  └─────────────────────────────────────────────────────┘
 ```
@@ -38,9 +38,9 @@ for testing.
    cp build/MyApp.bin ~/Code/Basilisk\ II/shared/
    ```
 4. **Claude reads output** — compiler warnings, errors, linker messages
-5. **Erik tests** — switches to Basilisk II, opens the app from the shared
-   volume, interacts with it
-6. **Erik reports** — describes what happened, screenshots if useful
+5. **You test** — switch to Basilisk II, open the app from the shared
+   volume, interact with it
+6. **You report** — describe what happened, screenshots if useful
 7. **Claude iterates** — fixes bugs, adds features, rebuilds
 
 ### Quick Build Command
@@ -57,14 +57,14 @@ Claude can run this as a single command to build and deploy in one step.
 ### Directory Structure
 
 ```
-PrintWatch/
+MyApp/
 ├── CMakeLists.txt
 ├── src/
 │   ├── main.c          # Entry point, event loop
 │   ├── app.h           # Application-wide types and declarations
 │   └── ...
 ├── resources/
-│   └── PrintWatch.r    # Rez resource definitions (menus, dialogs, icons)
+│   └── MyApp.r    # Rez resource definitions (menus, dialogs, icons)
 ├── build/              # CMake build output (gitignored)
 ├── docs/
 │   ├── RETRO68_SETUP.md
@@ -77,13 +77,13 @@ PrintWatch/
 
 ```cmake
 cmake_minimum_required(VERSION 3.9)
-project(PrintWatch C)
+project(MyApp C)
 
-add_application(PrintWatch
+add_application(MyApp
     SOURCES
         src/main.c
     RESOURCES
-        resources/PrintWatch.r
+        resources/MyApp.r
 )
 ```
 
@@ -118,22 +118,22 @@ Retro68 supports `printf()` and `cout` — output goes to a console window
 inside the emulated Mac if you link with the console library:
 
 ```cmake
-add_application(PrintWatch
+add_application(MyApp
     SOURCES src/main.c
-    RESOURCES resources/PrintWatch.r
+    RESOURCES resources/MyApp.r
 )
-target_link_libraries(PrintWatch RetroConsole)
+target_link_libraries(MyApp RetroConsole)
 ```
 
 ### Systematic Bug Hunting
 
-1. **Reproduce** — Erik describes the bug, Claude identifies candidate code
+1. **Reproduce** — you describe the bug, Claude identifies candidate code
 2. **Hypothesize** — Claude forms a single hypothesis about root cause
 3. **Add diagnostics** — Claude adds a printf or alert dialog to verify
 4. **Build and deploy** — Claude rebuilds, copies to shared folder
-5. **Observe** — Erik tests and reports what the diagnostic shows
+5. **Observe** — you test and report what the diagnostic shows
 6. **Fix** — Claude fixes the root cause, removes diagnostics, rebuilds
-7. **Verify** — Erik confirms the fix
+7. **Verify** — you confirm the fix
 
 ### Alert-Based Debugging
 
@@ -179,7 +179,7 @@ LaunchAPPL -e minivmac build/MyApp.dsk
 echo "Exit code: $?"
 ```
 
-Claude can run this and check the exit code without Erik needing to
+Claude can run this and check the exit code without you needing to
 interact with the emulator.
 
 **Note:** This requires Mini vMac configured with AutoQuit and a Mac Plus
@@ -199,12 +199,12 @@ ROM. See EMULATOR_SETUP.md for details.
 
 ### What Claude Cannot Do
 
-- See the emulator screen (Erik must describe what's happening)
+- See the emulator screen (you must describe what's happening)
 - Interact with the emulated Mac's GUI
 - Set breakpoints or step through code
 - Access the emulated Mac's filesystem directly (only via shared folder)
 
-### Effective Bug Reports from Erik
+### Effective Bug Reports
 
 The more specific, the faster Claude can fix it:
 - "The window opens but nothing draws inside it"
