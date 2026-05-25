@@ -85,37 +85,18 @@ resource 'MENU' (132, "Windows") {
     }
 };
 
-/* ---- About dialog ---- */
+/* ---- About box ---- A plain-bordered window (no title bar, no
+   close box) dismissed by any click or keypress. Drawn by hand at
+   runtime — see DoAbout() in src/main.c. */
 
-resource 'ALRT' (128, "About") {
-    { 80, 80, 220, 400 },
-    128,
-    {
-        OK, visible, sound1;
-        OK, visible, sound1;
-        OK, visible, sound1;
-        OK, visible, sound1;
-    },
-    centerMainScreen
-};
-
-resource 'DITL' (128, "About") {
-    {
-        { 110, 230, 130, 300 },
-        Button { enabled, "OK" };
-
-        { 12, 12, 32, 308 },
-        StaticText { disabled, "MdEdit \0xC9 a tiny Markdown editor" };
-
-        { 36, 12, 56, 308 },
-        StaticText { disabled, "Built with Retro68 / VibeRetro68" };
-
-        { 60, 12, 100, 308 },
-        StaticText { disabled,
-            "Headings, lists, task lists, horizontal rules, "
-            "and bold/italic styling. Detects and preserves "
-            "CR / LF / CRLF line endings." };
-    }
+resource 'WIND' (129, "About") {
+    { 90, 80, 230, 432 },
+    dBoxProc,
+    visible,
+    noGoAway,
+    0x0,
+    "",
+    noAutoCenter
 };
 
 /* ---- Save changes? prompt ---- */

@@ -458,10 +458,76 @@ static void DoToggleTask(DocState *doc)
 
 /* ---- Menu handling ---- */
 
+static void DrawAboutContent(WindowPtr w)
+{
+    Rect r = w->portRect;
+    EraseRect(&r);
+
+    TextFont(0);          /* system (Chicago) */
+    TextSize(12);
+    TextFace(bold);
+    MoveTo(24, 32);
+    DrawString("\pMdEdit");
+
+    TextFace(0);
+    MoveTo(24, 54);
+    DrawString("\pVersion 1.0.0");
+
+    MoveTo(24, 82);
+    DrawString("\pA small Markdown editor for classic Mac OS.");
+    MoveTo(24, 100);
+    DrawString("\pBuilt with Retro68 / VibeRetro68.");
+
+    TextFace(italic);
+    MoveTo(24, 128);
+    DrawString("\p(click anywhere to dismiss)");
+    TextFace(0);
+}
+
 static void DoAbout(void)
 {
+    WindowPtr w;
+    GrafPtr   savedPort;
+    EventRecord ev;
+    Boolean done = false;
+
     InitCursor();
-    NoteAlert(128, NULL);
+    w = GetNewWindow(129, NULL, (WindowPtr)-1L);
+    if (w == NULL) return;
+
+    GetPort(&savedPort);
+    SetPort(w);
+    DrawAboutContent(w);
+
+    /* Modal wait — any mouse or key dismisses; pass through update
+       events to other windows so they keep painting if uncovered. */
+    while (!done) {
+        if (WaitNextEvent(everyEvent, &ev, 6, NULL)) {
+            switch (ev.what) {
+                case mouseDown:
+                case keyDown:
+                case autoKey:
+                    done = true;
+                    break;
+                case updateEvt: {
+                    WindowPtr uw = (WindowPtr)ev.message;
+                    if (uw == w) {
+                        SetPort(w);
+                        BeginUpdate(w);
+                        DrawAboutContent(w);
+                        EndUpdate(w);
+                    } else {
+                        DocState *d = DocFromWindow(uw);
+                        if (d) DocUpdate(d);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    DisposeWindow(w);
+    SetPort(savedPort);
 }
 
 static void DoFileOpen(void)
