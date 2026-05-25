@@ -2,7 +2,7 @@
 # Actual building is delegated (CMake/Retro68 toolchain in build/,
 # emulator launches in scripts/run-*.sh). Run `make help` for targets.
 
-.PHONY: help setup fetch-deps build-retro68 doctor build basiliskii minivmac clean
+.PHONY: help setup fetch-deps build-retro68 doctor build basiliskii minivmac release clean
 
 help:
 	@echo "VibeRetro68 targets:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make build          cmake --build build/  (compile the project)"
 	@echo "  make basiliskii     Build and run in Basilisk II"
 	@echo "  make minivmac       Build and (re)launch Mini vMac"
+	@echo "  make release        Package build/ into release/MdEdit-<date>.zip"
 	@echo "  make clean          Remove build/"
 
 setup:
@@ -40,6 +41,9 @@ basiliskii:
 
 minivmac:
 	@./scripts/run-minivmac.sh
+
+release:
+	@./scripts/release.sh
 
 clean:
 	@rm -rf build/

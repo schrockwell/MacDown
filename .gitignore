@@ -9,3 +9,4 @@ build/
 # each subdir's README. See deps/<name>/README.md for what lives there.
 /deps/*/*
 !/deps/*/README.md
+/release
