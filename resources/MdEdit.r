@@ -186,54 +186,54 @@ resource 'MDED' (0, "Owner resource") {
     "MdEdit 1.0"
 };
 
-/* App icon — a filled 24x24 black square. 32x32 1-bit format: data
-   first (which pixels are black), mask second (which pixels are
-   "ours"; outside the mask the desktop background shows through). */
+/* App / document icons — generated from app.png / document.png by
+   scripts/png-to-icn.py. The mask is a flood-filled silhouette so the
+   white interior of the page outline stays opaque (no desktop bleed
+   through) without needing a PNG alpha channel. */
+
 resource 'ICN#' (128, "App") {
     {
-        /* data: rows 0-3 blank, rows 4-27 filled cols 4-27, rows 28-31 blank */
-        $"00000000 00000000 00000000 00000000"      /* rows 0-3 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 4-7 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 8-11 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 12-15 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 16-19 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 20-23 */
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"      /* rows 24-27 */
-        $"00000000 00000000 00000000 00000000",     /* rows 28-31 */
-        /* mask: same shape */
-        $"00000000 00000000 00000000 00000000"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"0FFFFFF0 0FFFFFF0 0FFFFFF0 0FFFFFF0"
-        $"00000000 00000000 00000000 00000000"
+        /* data */
+        $"00000000 00000000 01FFFF80 02000040"
+        $"02000040 02000040 02000040 02011040"
+        $"02011040 02022040 021FFC40 02022040"
+        $"02044040 023FF840 02044048 02088054"
+        $"02088062 02000054 02000088 02000110"
+        $"027FB220 02000440 0277C8C0 02001140"
+        $"027EDA40 02001C40 027CC040 02000040"
+        $"02000040 01FFFF80 00000000 00000000",
+        /* mask */
+        $"00000000 00000000 01FFFF80 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC8 03FFFFDC"
+        $"03FFFFFE 03FFFFFC 03FFFFF8 03FFFFF0"
+        $"03FFFFE0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 01FFFF80 00000000 00000000"
     }
 };
 
-/* Document icon — outlined 22-wide page (cols 5-26), rows 3-28, with
-   a black border and white interior so it reads as "a page". */
 resource 'ICN#' (129, "Document") {
     {
-        /* data: top edge row 3, side rails rows 4-27, bottom edge row 28 */
-        $"00000000 00000000 00000000 07FFFFE0"      /* rows 0-2 blank; row 3 top */
-        $"04000020 04000020 04000020 04000020"      /* rows 4-7 sides */
-        $"04000020 04000020 04000020 04000020"      /* rows 8-11 */
-        $"04000020 04000020 04000020 04000020"      /* rows 12-15 */
-        $"04000020 04000020 04000020 04000020"      /* rows 16-19 */
-        $"04000020 04000020 04000020 04000020"      /* rows 20-23 */
-        $"04000020 04000020 04000020 04000020"      /* rows 24-27 */
-        $"07FFFFE0 00000000 00000000 00000000",     /* row 28 bottom; rows 29-31 blank */
-        /* mask: the full filled page so interior is white-on-desktop */
-        $"00000000 00000000 00000000 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 07FFFFE0 07FFFFE0 07FFFFE0"
-        $"07FFFFE0 00000000 00000000 00000000"
+        /* data */
+        $"00000000 00000000 01FFFF80 02000040"
+        $"02000040 02000040 02000040 02011040"
+        $"02011040 02022040 021FFC40 02022040"
+        $"02044040 023FF840 02044040 02088040"
+        $"02088040 02000040 02000040 02000040"
+        $"027FBE40 02000040 0277E040 02000040"
+        $"027EF840 02000040 027CFE40 02000040"
+        $"02000040 01FFFF80 00000000 00000000",
+        /* mask */
+        $"00000000 00000000 01FFFF80 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 03FFFFC0 03FFFFC0 03FFFFC0"
+        $"03FFFFC0 01FFFF80 00000000 00000000"
     }
 };
 
