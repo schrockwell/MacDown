@@ -28,6 +28,11 @@ doctor:
 	@./scripts/doctor.sh
 
 build:
+	@if [ ! -f build/CMakeCache.txt ]; then \
+	    echo "==> Configuring build/ with the Retro68 toolchain"; \
+	    mkdir -p build && \
+	    (cd build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake); \
+	fi
 	@cmake --build build/
 
 basiliskii:

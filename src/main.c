@@ -24,41 +24,39 @@
 #define kFileMenuID   129
 #define kEditMenuID   130
 #define kFormatMenuID 131
+#define kWindowsMenuID 132
 
-/* File menu item IDs */
-#define kFileNew     1
-#define kFileOpen    2
-#define kFileClose   3
-#define kFileSave    4
-#define kFileSaveAs  5
-/* item 6 = separator */
-#define kFileQuit    7
+#define kWindowsMenuNext 1
+#define kWindowsMenuStaticItems 2
 
-/* Edit menu item IDs */
-#define kEditUndo    1
-/* item 2 = separator */
-#define kEditCut     3
-#define kEditCopy    4
-#define kEditPaste   5
-#define kEditClear   6
-#define kEditSelAll  7
-/* item 8 = separator */
+#define kFileNew      1
+#define kFileOpen     2
+#define kFileClose    3
+#define kFileSave     4
+#define kFileSaveAs   5
+#define kFileQuit     7
+
+#define kEditUndo     1
+#define kEditCut      3
+#define kEditCopy     4
+#define kEditPaste    5
+#define kEditClear    6
+#define kEditSelAll   7
 #define kEditDeleteWord 9
 
-/* Format menu item IDs */
-#define kFormatToggleTask   1
-/* item 2 = separator */
-#define kFormatIndent       3
-#define kFormatOutdent      4
-/* item 5 = separator */
-#define kFormatRestyleAll   6
+#define kFormatToggleTask 1
+#define kFormatIndent     3
+#define kFormatOutdent    4
+#define kFormatDuplicate  5
+#define kFormatRestyleAll 7
 
 #define kAboutItem    1
-
-/* How long the user must pause typing before we run the styler.
-   Short pause is fine now that DocMarkLineDirty filters out edits past
-   col 4 — most keystrokes won't trigger a restyle at all. */
 #define kRestyleIdleTicks 6L
+
+#define kLeftArrow  0x1C
+#define kRightArrow 0x1D
+#define kUpArrow    0x1E
+#define kDownArrow  0x1F
 
 #define UC(c) ((unsigned char)(c))
 
@@ -68,12 +66,12 @@ static void HandleMouse(EventRecord *ev);
 static void HandleKey(EventRecord *ev);
 static void HandleMenu(long mResult);
 static void DoAbout(void);
-static Boolean HandleReturnKey(void);
-static void DoToggleTask(void);
-static void DoDeleteWordBack(void);
+static Boolean HandleReturnKey(DocState *doc);
+static void DoToggleTask(DocState *doc);
+static void DoDeleteWordBack(DocState *doc);
 static void DoFileOpen(void);
-
-/* ---- Initialization ---- */
+static Boolean IsArrow(char c);
+static void HandleQuit(void);
 
 static void Initialize(void)
 {
@@ -93,30 +91,24 @@ static void Initialize(void)
     menuBar = GetNewMBar(kMenuBarID);
     SetMenuBar(menuBar);
     AppendResMenu(GetMenuHandle(kAppleMenuID), 'DRVR');
-
-    /* Undo starts disabled — DocClearUndo runs at init via DocInit
-       indirectly, but ensure the menu reflects "nothing to undo" before
-       anything else. */
     DisableItem(GetMenuHandle(kEditMenuID), kEditUndo);
-
     DrawMenuBar();
 
     AEInit();
-    DocInit();
+    DocAppInit();
 }
 
-/* ---- Finder launch with documents (System 6 + early 7 pre-AE) ---- */
-
+/* System 6 launch-with-files: open every dropped file. */
 static void OpenFromFinderLaunch(void)
 {
-    short msg, count;
+    short msg, count, i;
     AppFile af;
-
     CountAppFiles(&msg, &count);
-    if (count < 1) return;
-    GetAppFiles(1, &af);
-    DocOpen(af.vRefNum, af.fName);
-    ClrAppFiles(1);
+    for (i = 1; i <= count; i++) {
+        GetAppFiles(i, &af);
+        DocOpen(af.vRefNum, af.fName);
+        ClrAppFiles(i);
+    }
 }
 
 /* ---- Mouse ---- */
@@ -125,6 +117,7 @@ static void HandleMouse(EventRecord *ev)
 {
     WindowPtr w;
     short part = FindWindow(ev->where, &w);
+    DocState *doc = DocFromWindow(w);
 
     switch (part) {
         case inMenuBar:
@@ -139,38 +132,34 @@ static void HandleMouse(EventRecord *ev)
             DragWindow(w, ev->where, &bounds);
             break;
         }
-        case inGrow: {
-            long sz;
-            Rect limits;
-            SetRect(&limits, 200, 100, qd.screenBits.bounds.right,
-                    qd.screenBits.bounds.bottom);
-            sz = GrowWindow(w, ev->where, &limits);
-            if (sz != 0) {
-                SizeWindow(w, LoWord(sz), HiWord(sz), true);
-                DocResize();
+        case inGrow:
+            if (doc) {
+                long sz;
+                Rect limits;
+                SetRect(&limits, 200, 100, qd.screenBits.bounds.right,
+                        qd.screenBits.bounds.bottom);
+                sz = GrowWindow(w, ev->where, &limits);
+                if (sz != 0) {
+                    SizeWindow(w, LoWord(sz), HiWord(sz), true);
+                    DocResize(doc);
+                }
             }
             break;
-        }
         case inGoAway:
-            /* Close the document — the window hides and the app stays
-               alive (Quit is Cmd-Q). File → New brings the window
-               back; File → Open shows it with the loaded file. */
-            if (TrackGoAway(w, ev->where)) {
-                DocClose();
-            }
+            if (doc && TrackGoAway(w, ev->where)) DocClose(doc);
             break;
         case inZoomIn:
         case inZoomOut:
-            if (TrackBox(w, ev->where, part)) {
+            if (doc && TrackBox(w, ev->where, part)) {
                 ZoomWindow(w, part, true);
-                DocResize();
+                DocResize(doc);
             }
             break;
         case inContent:
             if (w != FrontWindow()) {
                 SelectWindow(w);
-            } else {
-                DocClick(ev);
+            } else if (doc) {
+                DocClick(doc, ev);
             }
             break;
     }
@@ -178,22 +167,21 @@ static void HandleMouse(EventRecord *ev)
 
 /* ---- Keyboard ---- */
 
-/* Insert a Pascal-string marker after the current selection.
-   outMarker[0] = length. */
-static void InsertMarker(const char *marker)
+static Boolean IsArrow(char c)
 {
-    short n = (unsigned char)marker[0];
-    if (n > 0) TEInsert((Ptr)(marker + 1), n, gDoc.te);
+    return (c == kLeftArrow || c == kRightArrow ||
+            c == kUpArrow   || c == kDownArrow);
 }
 
-/* Reset the "typing style" so the next inserted char is plain Geneva 12.
-   Classic TextEdit doesn't honor TESetStyle on a zero-width selection
-   as a "pending style" hint — the next typed char still inherits the
-   style of the char to its left. Workaround: apply plain style to the
-   just-inserted CR itself; subsequent chars inherit the CR's style. */
-static void ResetInsertStyleToPlain(void)
+static void InsertMarker(DocState *doc, const char *marker)
 {
-    short pos = (**gDoc.te).selStart;
+    short n = (unsigned char)marker[0];
+    if (n > 0) TEInsert((Ptr)(marker + 1), n, doc->te);
+}
+
+static void ResetInsertStyleToPlain(DocState *doc)
+{
+    short pos = (**doc->te).selStart;
     short crPos;
     TextStyle plain;
     GrafPtr savedPort;
@@ -207,17 +195,16 @@ static void ResetInsertStyleToPlain(void)
     plain.tsSize = 12;
     plain.tsColor.red = plain.tsColor.green = plain.tsColor.blue = 0;
 
-    /* Suppress the selection-highlight flash during the style change. */
     GetPort(&savedPort);
-    SetPort(gDoc.window);
+    SetPort(doc->window);
     savedClip = NewRgn();
     emptyRgn  = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
-    TESetSelect(crPos, pos, gDoc.te);
-    TESetStyle(doFace | doSize, &plain, false, gDoc.te);
-    TESetSelect(pos, pos, gDoc.te);
+    TESetSelect(crPos, pos, doc->te);
+    TESetStyle(doFace | doSize, &plain, false, doc->te);
+    TESetSelect(pos, pos, doc->te);
 
     SetClip(savedClip);
     DisposeRgn(savedClip);
@@ -225,135 +212,115 @@ static void ResetInsertStyleToPlain(void)
     SetPort(savedPort);
 }
 
-/* Returns true if it handled the Return itself; false → let TEKey run. */
-static Boolean HandleReturnKey(void)
+static Boolean HandleReturnKey(DocState *doc)
 {
-    short pos = (**gDoc.te).selStart;
+    short pos = (**doc->te).selStart;
     char marker[24];
     Boolean isEmpty = false;
     Boolean hasMarker;
 
-    hasMarker = MdNextListMarker(gDoc.te, pos, marker, &isEmpty);
+    hasMarker = MdNextListMarker(doc->te, pos, marker, &isEmpty);
     if (!hasMarker) return false;
 
     if (isEmpty) {
-        /* Exit list: select the marker on the current line and delete it,
-           then insert a plain CR. */
         short lineStart, lineEnd;
-        MdFindLineBounds(gDoc.te, pos, &lineStart, &lineEnd);
-        TESetSelect(lineStart, lineEnd, gDoc.te);
-        TEDelete(gDoc.te);
-        TEKey('\r', gDoc.te);
-        DocMarkDirty();
-        DocMarkLineDirty((**gDoc.te).selStart);
+        MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
+        TESetSelect(lineStart, lineEnd, doc->te);
+        TEDelete(doc->te);
+        TEKey('\r', doc->te);
+        DocMarkDirty(doc);
+        DocMarkLineDirty(doc, (**doc->te).selStart);
         return true;
     }
 
-    /* Continue list: insert CR then marker. */
-    TEKey('\r', gDoc.te);
-    InsertMarker(marker);
-    DocMarkDirty();
-    DocMarkLineDirty((**gDoc.te).selStart);
+    TEKey('\r', doc->te);
+    InsertMarker(doc, marker);
+    DocMarkDirty(doc);
+    DocMarkLineDirty(doc, (**doc->te).selStart);
     return true;
-}
-
-/* Arrow key character codes (charCodeMask). */
-#define kLeftArrow  0x1C
-#define kRightArrow 0x1D
-#define kUpArrow    0x1E
-#define kDownArrow  0x1F
-
-static Boolean IsArrow(char c)
-{
-    return (c == kLeftArrow || c == kRightArrow ||
-            c == kUpArrow   || c == kDownArrow);
 }
 
 static void HandleKey(EventRecord *ev)
 {
+    DocState *doc = DocActive();
     char    c       = ev->message & charCodeMask;
     Boolean shift   = (ev->modifiers & shiftKey)   != 0;
     Boolean cmd     = (ev->modifiers & cmdKey)     != 0;
     Boolean option  = (ev->modifiers & optionKey)  != 0;
     short   pos;
 
-    /* Option + arrow up/down: line move (mutates text, not cursor). */
-    if (option && !cmd) {
-        if (c == kUpArrow)   { DocMoveLineUp();   return; }
-        if (c == kDownArrow) { DocMoveLineDown(); return; }
-        /* Option + Left/Right (word jump) falls through to the arrow
-           handling below, which knows about the `option` modifier. */
-    }
-
-    /* Option + Backspace: delete the previous word. */
-    if (option && !cmd && c == 0x08) {
-        DocBeforeAction();
-        DoDeleteWordBack();
+    /* Cmd-` cycles to the next window. Done before MenuKey because the
+       backtick isn't a real menu key equivalent. */
+    if (cmd && (c == '`' || c == '~')) {
+        DocCycleWindow();
         return;
     }
 
-    /* Cmd + [ / ] : outdent / indent. Check before MenuKey so the
-       bracket keys aren't intercepted as menu shortcuts. */
-    if (cmd && !option && !shift) {
-        if (c == '[') { DocOutdentLine(); return; }
-        if (c == ']') { DocIndentLine();  return; }
+    /* Menu commands always work even with no doc (e.g. Cmd-N, Cmd-O, Cmd-Q). */
+    if (cmd && (doc == NULL || c == 'n' || c == 'N' ||
+                c == 'o' || c == 'O' || c == 'q' || c == 'Q')) {
+        long mr = MenuKey(c);
+        if (HiWord(mr) != 0) HandleMenu(mr);
+        return;
     }
 
-    pos = (**gDoc.te).selStart;
+    if (doc == NULL) return;
 
-    /* Arrow keys — handled manually (TEKey doesn't move the cursor).
-       Cmd jumps to line start/end; Shift extends selection from
-       selAnchor; combinations of both work as expected. */
+    if (option && !cmd) {
+        if (c == kUpArrow)   { DocMoveLineUp(doc);   return; }
+        if (c == kDownArrow) { DocMoveLineDown(doc); return; }
+    }
+
+    if (option && !cmd && c == 0x08) {
+        DocBeforeAction(doc);
+        DoDeleteWordBack(doc);
+        return;
+    }
+
+    if (cmd && !option && !shift) {
+        if (c == '[') { DocOutdentLine(doc); return; }
+        if (c == ']') { DocIndentLine(doc);  return; }
+    }
+
+    pos = (**doc->te).selStart;
+
     if (IsArrow(c)) {
         short newCursor;
-        short curEnd = (**gDoc.te).selEnd;
-        DocBreakTypingRun();
-        /* The "active" cursor end during shift-extend is whichever end
-           is opposite the anchor. Otherwise we start from selStart
-           (left arrow / up) or selEnd (right arrow / down) so a
-           collapsed-from-selection arrow goes to the natural edge. */
+        short curEnd = (**doc->te).selEnd;
         short startFrom;
+        DocBreakTypingRun(doc);
         if (shift) {
-            startFrom = (pos == gDoc.selAnchor) ? curEnd : pos;
+            startFrom = (pos == doc->selAnchor) ? curEnd : pos;
         } else {
-            if (pos != curEnd) {
-                startFrom = (c == kLeftArrow || c == kUpArrow) ? pos : curEnd;
-            } else {
-                startFrom = pos;
-            }
+            if (pos != curEnd) startFrom = (c == kLeftArrow || c == kUpArrow) ? pos : curEnd;
+            else                startFrom = pos;
         }
 
         if (cmd) {
-            /* Cmd+Left/Right jump to line start/end. Cmd+Up/Down go
-               to start/end of document. */
-            if (c == kLeftArrow)       newCursor = DocLineStartOffset(startFrom);
-            else if (c == kRightArrow) newCursor = DocLineEndOffset(startFrom);
+            if (c == kLeftArrow)       newCursor = DocLineStartOffset(doc, startFrom);
+            else if (c == kRightArrow) newCursor = DocLineEndOffset(doc, startFrom);
             else if (c == kUpArrow)    newCursor = 0;
-            else                       newCursor = (**gDoc.te).teLength;
+            else                       newCursor = (**doc->te).teLength;
         } else if (option) {
-            /* Option+Left/Right: word jump. (Option+Up/Down was already
-               handled above as line move and returned.) */
-            if (c == kLeftArrow)       newCursor = DocOffsetWordLeft(startFrom);
-            else if (c == kRightArrow) newCursor = DocOffsetWordRight(startFrom);
-            else                       newCursor = startFrom;  /* unreachable */
+            if (c == kLeftArrow)       newCursor = DocOffsetWordLeft(doc, startFrom);
+            else if (c == kRightArrow) newCursor = DocOffsetWordRight(doc, startFrom);
+            else                       newCursor = startFrom;
         } else {
             switch (c) {
-                case kLeftArrow:  newCursor = DocOffsetLeft(startFrom);  break;
-                case kRightArrow: newCursor = DocOffsetRight(startFrom); break;
-                case kUpArrow:    newCursor = DocOffsetUp(startFrom);    break;
-                case kDownArrow:  newCursor = DocOffsetDown(startFrom);  break;
-                default:          newCursor = startFrom;                 break;
+                case kLeftArrow:  newCursor = DocOffsetLeft(doc, startFrom);  break;
+                case kRightArrow: newCursor = DocOffsetRight(doc, startFrom); break;
+                case kUpArrow:    newCursor = DocOffsetUp(doc, startFrom);    break;
+                case kDownArrow:  newCursor = DocOffsetDown(doc, startFrom);  break;
+                default:          newCursor = startFrom;                      break;
             }
         }
 
-        DocMoveCursorTo(newCursor, shift);
+        DocMoveCursorTo(doc, newCursor, shift);
         return;
     }
 
     if (cmd) {
-        /* Cmd-L: toggle/create task on current line. */
-        if (c == 'l' || c == 'L') { DoToggleTask(); return; }
-        /* Other Cmd-keys go through the menu manager. */
+        if (c == 'l' || c == 'L') { DoToggleTask(doc); return; }
         {
             long mr = MenuKey(c);
             if (HiWord(mr) != 0) HandleMenu(mr);
@@ -362,147 +329,134 @@ static void HandleKey(EventRecord *ev)
     }
 
     if (c == '\r') {
-        DocBeforeAction();   /* Return ends any typing run and starts a new
-                                undo step (snapshots before the CR). */
-        if (HandleReturnKey()) {
-            ResetInsertStyleToPlain();
-            gDoc.selAnchor = (**gDoc.te).selStart;
+        DocBeforeAction(doc);
+        if (HandleReturnKey(doc)) {
+            ResetInsertStyleToPlain(doc);
+            doc->selAnchor = (**doc->te).selStart;
             return;
         }
     } else {
-        DocBeforeTyping();   /* First char of a typing run snapshots; rest
-                                of the run is grouped into one undo step. */
+        DocBeforeTyping(doc);
     }
 
-    TEKey(c, gDoc.te);
-    if (c == '\r') ResetInsertStyleToPlain();
-    gDoc.selAnchor = (**gDoc.te).selStart;
-    DocMarkDirty();
-    DocMarkLineDirty((**gDoc.te).selStart);
-    DocAdjustScrollbar();
+    TEKey(c, doc->te);
+    if (c == '\r') ResetInsertStyleToPlain(doc);
+    doc->selAnchor = (**doc->te).selStart;
+    DocMarkDirty(doc);
+    DocMarkLineDirty(doc, (**doc->te).selStart);
+    DocAdjustScrollbar(doc);
+    /* End the typing burst at word boundaries so the next keystroke
+       takes a fresh undo snapshot. Without this, fast continuous
+       typing across multiple words counts as one burst and Cmd-Z
+       wipes them all. */
+    if (c == ' ' || c == '\t') doc->inTypingRun = false;
 }
 
-/* ---- Cmd-L task toggle ---- */
+/* ---- Cmd-L / delete-word implementations ---- */
 
-/* Force a restyle of an arbitrary range, bypassing DocMarkLineDirty's
-   col-7 / plain-style filters. Used after structural edits like Cmd-L
-   prefix insertion or line moves where we know the range must redraw. */
-static void ForceRestyleRange(short start, short end)
+static void ForceRestyleRangeFor(DocState *doc, short start, short end)
 {
-    gDoc.dirtyLineStart = start;
-    gDoc.dirtyLineEnd   = end;
-    gDoc.lastDirtyTick  = TickCount() - 1000;
-    DocFlushRestyle();
+    doc->dirtyLineStart = start;
+    doc->dirtyLineEnd   = end;
+    doc->lastDirtyTick  = TickCount() - 1000;
+    DocFlushRestyle(doc);
 }
 
-/* Delete the previous word (or current selection if any). Uses the
-   same word-boundary logic as Option-Left, so it stops at the start of
-   the current line — a second invocation deletes the CR, joining lines.
-   Wired to Option-Backspace and Edit → Delete Word Back. */
-static void DoDeleteWordBack(void)
+static void DoDeleteWordBack(DocState *doc)
 {
-    short curPos = (**gDoc.te).selStart;
-    short curEnd = (**gDoc.te).selEnd;
+    short curPos = (**doc->te).selStart;
+    short curEnd = (**doc->te).selEnd;
     short newCur;
 
     if (curPos != curEnd) {
-        TEDelete(gDoc.te);
+        TEDelete(doc->te);
     } else {
-        short wordLeft = DocOffsetWordLeft(curPos);
+        short wordLeft = DocOffsetWordLeft(doc, curPos);
         if (wordLeft >= curPos) return;
-        TESetSelect(wordLeft, curPos, gDoc.te);
-        TEDelete(gDoc.te);
+        TESetSelect(wordLeft, curPos, doc->te);
+        TEDelete(doc->te);
     }
-    gDoc.selAnchor = (**gDoc.te).selStart;
-    DocMarkDirty();
-    newCur = (**gDoc.te).selStart;
-    ForceRestyleRange(DocLineStartOffset(newCur), DocLineEndOffset(newCur));
-    DocAdjustScrollbar();
+    doc->selAnchor = (**doc->te).selStart;
+    DocMarkDirty(doc);
+    newCur = (**doc->te).selStart;
+    ForceRestyleRangeFor(doc, DocLineStartOffset(doc, newCur), DocLineEndOffset(doc, newCur));
+    DocAdjustScrollbar(doc);
 }
 
-static void DoToggleTask(void)
+static void DoToggleTask(DocState *doc)
 {
     short pos;
     short lineStart, lineEnd, lineLen;
-    DocBeforeAction();
-    pos = (**gDoc.te).selStart;
     CharsHandle ch;
     char *text;
     MdLineKind kind;
     short leading;
 
-    MdFindLineBounds(gDoc.te, pos, &lineStart, &lineEnd);
+    DocBeforeAction(doc);
+    pos = (**doc->te).selStart;
+    MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
     lineLen = lineEnd - lineStart;
 
-    ch = TEGetText(gDoc.te);
+    ch = TEGetText(doc->te);
     HLock((Handle)ch);
     text = *ch + lineStart;
     kind = MdClassifyLine(text, lineLen);
 
-    /* Count leading spaces — markdown allows up to 3 before the marker. */
     leading = 0;
     while (leading < lineLen && leading < 3 && text[leading] == ' ') leading++;
     HUnlock((Handle)ch);
 
-    /* Case A: line is already a task list item — toggle the box. */
     if (kind == kLine_TaskUnchecked || kind == kLine_TaskChecked) {
-        short boxPos = MdFindTaskBox(gDoc.te, pos);
+        short boxPos = MdFindTaskBox(doc->te, pos);
         short savedStart, savedEnd;
         char current, replacement;
 
         if (boxPos < 0) { SysBeep(1); return; }
 
-        savedStart = (**gDoc.te).selStart;
-        savedEnd   = (**gDoc.te).selEnd;
+        savedStart = (**doc->te).selStart;
+        savedEnd   = (**doc->te).selEnd;
 
-        ch = TEGetText(gDoc.te);
+        ch = TEGetText(doc->te);
         HLock((Handle)ch);
         current = (*ch)[boxPos];
         HUnlock((Handle)ch);
 
         replacement = (current == ' ') ? 'x' : ' ';
 
-        TESetSelect(boxPos, boxPos + 1, gDoc.te);
-        TEDelete(gDoc.te);
-        TEKey(replacement, gDoc.te);
+        TESetSelect(boxPos, boxPos + 1, doc->te);
+        TEDelete(doc->te);
+        TEKey(replacement, doc->te);
 
-        TESetSelect(savedStart, savedEnd, gDoc.te);
-        DocMarkDirty();
-        DocMarkLineDirty(boxPos);
+        TESetSelect(savedStart, savedEnd, doc->te);
+        DocMarkDirty(doc);
+        DocMarkLineDirty(doc, boxPos);
         return;
     }
 
-    /* Case B: line is an unordered list item — upgrade to a task by
-       inserting "[ ] " after the marker. */
     if (kind == kLine_UnorderedItem) {
-        short insertPos = lineStart + leading + 2;  /* after "- " */
+        short insertPos = lineStart + leading + 2;
         short newSel = (pos >= insertPos) ? pos + 4 : pos;
-
-        TESetSelect(insertPos, insertPos, gDoc.te);
-        TEInsert((Ptr)"[ ] ", 4, gDoc.te);
-        TESetSelect(newSel, newSel, gDoc.te);
-
-        DocMarkDirty();
-        ForceRestyleRange(lineStart, lineEnd + 4);
-        DocAdjustScrollbar();
+        TESetSelect(insertPos, insertPos, doc->te);
+        TEInsert((Ptr)"[ ] ", 4, doc->te);
+        TESetSelect(newSel, newSel, doc->te);
+        DocMarkDirty(doc);
+        ForceRestyleRangeFor(doc, lineStart, lineEnd + 4);
+        DocAdjustScrollbar(doc);
         return;
     }
 
-    /* Case C: any other line — prepend a full "- [ ] " prefix. Cursor
-       follows its char forward by 6. */
     {
         short newSel = pos + 6;
-        TESetSelect(lineStart, lineStart, gDoc.te);
-        TEInsert((Ptr)"- [ ] ", 6, gDoc.te);
-        TESetSelect(newSel, newSel, gDoc.te);
-
-        DocMarkDirty();
-        ForceRestyleRange(lineStart, lineEnd + 6);
-        DocAdjustScrollbar();
+        TESetSelect(lineStart, lineStart, doc->te);
+        TEInsert((Ptr)"- [ ] ", 6, doc->te);
+        TESetSelect(newSel, newSel, doc->te);
+        DocMarkDirty(doc);
+        ForceRestyleRangeFor(doc, lineStart, lineEnd + 6);
+        DocAdjustScrollbar(doc);
     }
 }
 
-/* ---- Menu ---- */
+/* ---- Menu handling ---- */
 
 static void DoAbout(void)
 {
@@ -518,7 +472,6 @@ static void DoFileOpen(void)
     GrafPtr savedPort;
     short i;
 
-    /* Zero-init the reply to avoid any garbage-field surprises in SF. */
     {
         char *p = (char *)&reply;
         for (i = 0; i < (short)sizeof(SFReply); i++) p[i] = 0;
@@ -526,10 +479,7 @@ static void DoFileOpen(void)
 
     types[0] = 'TEXT';
 
-    /* SF draws its modal in the current GrafPort — ensure it's a real
-       window and the cursor isn't stuck as a watch. */
     GetPort(&savedPort);
-    SetPort(gDoc.window);
     InitCursor();
 
     where.h = 80;
@@ -537,8 +487,6 @@ static void DoFileOpen(void)
     SFGetFile(where, "\p", NULL, 1, types, NULL, &reply);
 
     SetPort(savedPort);
-    /* Same OS-state-after-modal dance as DocSaveAs — yield once so the
-       File Manager doesn't wedge on the immediately-following open. */
     {
         EventRecord ev;
         EventAvail(0, &ev);
@@ -548,10 +496,16 @@ static void DoFileOpen(void)
     DocOpen(reply.vRefNum, reply.fName);
 }
 
+static void HandleQuit(void)
+{
+    if (DocCloseAll()) gQuitRequested = true;
+}
+
 static void HandleMenu(long mResult)
 {
     short menuID = HiWord(mResult);
     short item   = LoWord(mResult);
+    DocState *doc = DocActive();
 
     switch (menuID) {
         case kAppleMenuID:
@@ -568,68 +522,66 @@ static void HandleMenu(long mResult)
             switch (item) {
                 case kFileNew:    DocNew(); break;
                 case kFileOpen:   DoFileOpen(); break;
-                case kFileClose:  DocClose(); break;
-                case kFileSave:   DocSave(); break;
-                case kFileSaveAs: DocSaveAs(); break;
-                case kFileQuit:
-                    /* If there's no file open, skip the save prompt —
-                       there's nothing the user has explicitly named to
-                       save. Untitled doc edits just get discarded. */
-                    if (!gDoc.hasFile || DocPromptSaveIfDirty()) {
-                        gQuitRequested = true;
-                    }
-                    break;
+                case kFileClose:  if (doc) DocClose(doc); break;
+                case kFileSave:   if (doc) DocSave(doc); break;
+                case kFileSaveAs: if (doc) DocSaveAs(doc); break;
+                case kFileQuit:   HandleQuit(); break;
             }
             break;
 
         case kEditMenuID:
-            /* Let the Edit Manager handle DA windows first. */
             if (SystemEdit(item - 1)) break;
+            if (doc == NULL) break;
             switch (item) {
-                case kEditUndo:   DocUndo(); break;
-                case kEditCut:    DocBeforeAction();
-                                  TECut(gDoc.te);
-                                  DocMarkDirty();
-                                  DocMarkLineDirty((**gDoc.te).selStart);
+                case kEditUndo:   DocUndo(doc); break;
+                case kEditCut:    DocBeforeAction(doc);
+                                  TECut(doc->te);
+                                  DocMarkDirty(doc);
+                                  DocMarkLineDirty(doc, (**doc->te).selStart);
                                   break;
-                case kEditCopy:   TECopy(gDoc.te); break;
-                case kEditPaste:  DocBeforeAction();
-                                  TEPaste(gDoc.te);
-                                  DocMarkDirty();
-                                  DocMarkLineDirty((**gDoc.te).selStart);
+                case kEditCopy:   TECopy(doc->te); break;
+                case kEditPaste:  DocBeforeAction(doc);
+                                  TEPaste(doc->te);
+                                  DocMarkDirty(doc);
+                                  DocMarkLineDirty(doc, (**doc->te).selStart);
                                   break;
-                case kEditClear:  DocBeforeAction();
-                                  TEDelete(gDoc.te);
-                                  DocMarkDirty();
-                                  DocMarkLineDirty((**gDoc.te).selStart);
+                case kEditClear:  DocBeforeAction(doc);
+                                  TEDelete(doc->te);
+                                  DocMarkDirty(doc);
+                                  DocMarkLineDirty(doc, (**doc->te).selStart);
                                   break;
-                case kEditSelAll:
-                    DocBreakTypingRun();
-                    TESetSelect(0, 32767, gDoc.te);
-                    break;
-                case kEditDeleteWord:
-                    DocBeforeAction();
-                    DoDeleteWordBack();
-                    break;
+                case kEditSelAll: DocBreakTypingRun(doc);
+                                  TESetSelect(0, 32767, doc->te);
+                                  break;
+                case kEditDeleteWord: DocBeforeAction(doc); DoDeleteWordBack(doc); break;
             }
-            DocAdjustScrollbar();
+            if (doc) DocAdjustScrollbar(doc);
             break;
 
         case kFormatMenuID:
+            if (doc == NULL) break;
             switch (item) {
-                case kFormatToggleTask:   DoToggleTask(); break;
-                case kFormatIndent:       DocIndentLine(); break;
-                case kFormatOutdent:      DocOutdentLine(); break;
-                case kFormatRestyleAll:   MdRestyleAll(gDoc.te);
-                                          InvalRect(&gDoc.window->portRect);
-                                          break;
+                case kFormatToggleTask: DoToggleTask(doc); break;
+                case kFormatIndent:     DocIndentLine(doc); break;
+                case kFormatOutdent:    DocOutdentLine(doc); break;
+                case kFormatDuplicate:  DocDuplicateLine(doc); break;
+                case kFormatRestyleAll: MdRestyleAll(doc->te);
+                                        InvalRect(&doc->window->portRect);
+                                        break;
+            }
+            break;
+
+        case kWindowsMenuID:
+            if (item == kWindowsMenuNext) DocCycleWindow();
+            else if (item > kWindowsMenuStaticItems) {
+                DocSelectFromMenu(item - kWindowsMenuStaticItems);
             }
             break;
     }
     HiliteMenu(0);
 }
 
-/* ---- Main ---- */
+/* ---- Main loop ---- */
 
 int main(void)
 {
@@ -638,8 +590,11 @@ int main(void)
 
     Initialize();
 
-    /* System 6 / pre-AE Finder launch-with-files. */
+    /* On launch, either Finder dropped docs on us (System 6 path) or
+       we got an 'odoc' Apple Event. If neither, spawn an untitled doc
+       so the user has something to type into. */
     OpenFromFinderLaunch();
+    if (gDocs == NULL) DocNew();
 
     while (!gQuitRequested) {
         if (WaitNextEvent(everyEvent, &event, sleepTicks, NULL)) {
@@ -647,41 +602,42 @@ int main(void)
                 case mouseDown:    HandleMouse(&event); break;
                 case keyDown:
                 case autoKey:      HandleKey(&event); break;
-                case updateEvt:    DocUpdate(); break;
-                case activateEvt:
-                    DocActivate((event.modifiers & activeFlag) != 0);
+                case updateEvt: {
+                    DocState *d = DocFromWindow((WindowPtr)event.message);
+                    if (d) DocUpdate(d);
                     break;
+                }
+                case activateEvt: {
+                    DocState *d = DocFromWindow((WindowPtr)event.message);
+                    if (d) DocActivate(d, (event.modifiers & activeFlag) != 0);
+                    break;
+                }
                 case kHighLevelEvent:
                     AEDispatch(&event);
                     break;
                 case osEvt:
-                    /* Suspend/resume from MultiFinder. Upper byte = 0x01;
-                       bit 0 of low byte = resume flag. */
                     if ((event.message >> 24) == 0x01) {
-                        DocActivate((event.message & 0x01) != 0);
+                        DocState *d = DocActive();
+                        if (d) DocActivate(d, (event.message & 0x01) != 0);
                     }
                     break;
             }
         }
 
-        TEIdle(gDoc.te);
-        DocAdjustCursor();
-
-        /* Restyle dirty region after a brief quiet period.
-           DocFlushRestyle already InvalRects the TE area so the
-           next updateEvt does the redraw cleanly. */
-        if (gDoc.dirtyLineStart >= 0 &&
-            (TickCount() - gDoc.lastDirtyTick) > kRestyleIdleTicks)
+        /* Idle work for the active doc only. */
         {
-            DocFlushRestyle();
-            DocAdjustScrollbar();
+            DocState *d = DocActive();
+            if (d) {
+                TEIdle(d->te);
+                if (d->dirtyLineStart >= 0 &&
+                    (TickCount() - d->lastDirtyTick) > kRestyleIdleTicks) {
+                    DocFlushRestyle(d);
+                    DocAdjustScrollbar(d);
+                }
+            }
+            DocAdjustCursor();
         }
     }
 
-    DocDispose();
-    /* `return 0` is fine under MultiFinder but on bare System 6 it can
-       leave the Process Manager waiting indefinitely. ExitToShell()
-       guarantees the app terminates and the Finder regains control. */
-    ExitToShell();
     return 0;
 }

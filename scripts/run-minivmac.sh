@@ -15,6 +15,14 @@ MINIVMAC_APP="$PROJECT_ROOT/deps/minivmac/minivmac-macOS-SEFDHD.app"
 
 pkill -f "$MINIVMAC_APP" 2>/dev/null && sleep 1 || true
 
+# Bootstrap build/ on first run (or after `make clean`).
+if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    echo "==> Configuring build/ with the Retro68 toolchain"
+    mkdir -p "$BUILD_DIR"
+    (cd "$BUILD_DIR" && cmake "$PROJECT_ROOT" \
+        -DCMAKE_TOOLCHAIN_FILE="$PROJECT_ROOT/deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake")
+fi
+
 cmake --build "$BUILD_DIR"
 
 if [ -n "$1" ]; then

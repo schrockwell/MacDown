@@ -101,11 +101,11 @@ static Boolean IsWordChar(char c)
            u >= 0x80;  /* MacRoman extended chars treated as word chars */
 }
 
-static void ApplyBold(TEHandle te, short start, short end)
+static void ApplyFace(TEHandle te, short start, short end, short face)
 {
     TextStyle ts;
     ts.tsFont  = 0;
-    ts.tsFace  = bold;
+    ts.tsFace  = face;
     ts.tsSize  = 0;
     ts.tsColor.red = ts.tsColor.green = ts.tsColor.blue = 0;
     TESetSelect(start, end, te);
@@ -171,7 +171,8 @@ static void StyleInlineEmphasis(TEHandle te,
 
         if (closer < 0) { i++; continue; }
 
-        ApplyBold(te, lineStart + contentStart, lineStart + closer);
+        ApplyFace(te, lineStart + contentStart, lineStart + closer,
+                  (runLen == 2) ? bold : italic);
         i = closer + runLen;
     }
 }

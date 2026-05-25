@@ -96,14 +96,11 @@ static pascal OSErr HandleODOC(const AppleEvent *ev, AppleEvent *reply, long ref
     if (err != noErr) { AEDisposeDesc(&docList); return err; }
 
     AECountItems(&docList, &count);
-    /* Single-doc model: only the first FSSpec wins. */
+    /* One window per opened file. */
     for (i = 1; i <= count; i++) {
         err = AEGetNthPtr(&docList, i, typeFSS, &kw, &typ,
                           &fs, sizeof(FSSpec), &actualSize);
-        if (err == noErr) {
-            DocOpen(fs.vRefNum, fs.name);
-            break;  /* single-doc */
-        }
+        if (err == noErr) DocOpen(fs.vRefNum, fs.name);
     }
 
     AEDisposeDesc(&docList);
@@ -123,10 +120,8 @@ static pascal OSErr HandleQUIT(const AppleEvent *ev, AppleEvent *reply, long ref
     (void)reply; (void)ref;
     err = GotRequiredParams(ev);
     if (err != noErr) return err;
-    /* Match the File-menu Quit path: no save prompt when there's no
-       open file (untitled-doc edits are discarded). */
-    if (!gDoc.hasFile || DocPromptSaveIfDirty()) {
-        gQuitRequested = true;
-    }
+    /* Walk every doc and prompt for unsaved changes. DocCloseAll
+       returns false if the user hits Cancel on any prompt. */
+    if (DocCloseAll()) gQuitRequested = true;
     return noErr;
 }

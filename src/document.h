@@ -10,7 +10,9 @@
 
 #define kMdScrollWidth 15
 
-typedef struct {
+typedef struct DocState DocState;
+struct DocState {
+    DocState *next;                  /* linked-list, gDocs is head */
     WindowPtr     window;
     TEHandle      te;
     ControlHandle vScroll;
@@ -21,89 +23,80 @@ typedef struct {
     LineEndKind   leKind;
     short         dirtyLineStart;    /* -1 = clean */
     short         dirtyLineEnd;
-    long          lastDirtyTick;     /* TickCount at last edit */
-    short         selAnchor;         /* fixed end during shift-arrow ext */
-    /* Single-level undo. The snapshot stores the doc state just before
-       the last undoable action. DocUndo swaps current↔snapshot so a
-       second Undo redoes the action. inTypingRun groups consecutive
-       keystrokes into one undo step. */
-    Handle        undoText;
+    long          lastDirtyTick;
+    short         selAnchor;
+    Handle        undoText;          /* single snapshot, NULL = no undo */
     short         undoLen;
     short         undoSelStart;
     short         undoSelEnd;
     LineEndKind   undoLE;
     Boolean       canUndo;
     Boolean       inTypingRun;
-} DocState;
+};
 
-extern DocState gDoc;
+/* The list of all open documents. */
+extern DocState *gDocs;
 
 /* Lifecycle. */
-void   DocInit(void);                       /* create window + empty TE */
-void   DocDispose(void);
-Boolean DocNew(void);                       /* discard current → blank doc, window shown */
-Boolean DocOpen(short vRefNum, ConstStr255Param name);
-Boolean DocSave(void);                      /* save to existing file */
-Boolean DocSaveAs(void);                    /* prompt for destination */
-Boolean DocPromptSaveIfDirty(void);         /* true = ok to proceed; false = cancel */
-Boolean DocClose(void);                     /* hide window + clear state; app stays alive */
+void      DocAppInit(void);                       /* one-time module init */
+DocState *DocNew(void);                           /* create + show new empty doc */
+Boolean   DocOpen(short vRefNum, ConstStr255Param name);
+Boolean   DocSave(DocState *doc);
+Boolean   DocSaveAs(DocState *doc);
+Boolean   DocPromptSaveIfDirty(DocState *doc);    /* true = ok to proceed */
+Boolean   DocClose(DocState *doc);                /* dispose window + doc; remove from list */
+Boolean   DocCloseAll(void);                      /* prompt-and-close every doc; false if user cancelled */
 
-/* Window plumbing. */
-void   DocResize(void);
-void   DocUpdate(void);
-void   DocActivate(Boolean active);
-void   DocClick(EventRecord *ev);
-void   DocAdjustScrollbar(void);
+/* Lookup. */
+DocState *DocFromWindow(WindowPtr w);
+DocState *DocActive(void);                        /* DocFromWindow(FrontWindow()) */
 
-/* Selection helpers. */
-void   DocMarkDirty(void);
-void   DocMarkLineDirty(short pos);
+/* Windows menu. */
+void      RebuildWindowsMenu(void);
+void      DocSelectFromMenu(short menuItem);      /* 1-based into dynamic doc items */
+void      DocCycleWindow(void);                   /* send front to back, next comes forward */
 
-/* Re-style any pending dirty region, then clear the marker. */
-void   DocFlushRestyle(void);
+/* Window plumbing — operate on a given doc. */
+void   DocResize(DocState *doc);
+void   DocUpdate(DocState *doc);
+void   DocActivate(DocState *doc, Boolean active);
+void   DocClick(DocState *doc, EventRecord *ev);
+void   DocAdjustScrollbar(DocState *doc);
 
-/* Swap the current line with the line above / below. No-op at the
-   top/bottom edges. */
-void   DocMoveLineUp(void);
-void   DocMoveLineDown(void);
+/* Selection / dirty tracking. */
+void   DocMarkDirty(DocState *doc);
+void   DocMarkLineDirty(DocState *doc, short pos);
+void   DocFlushRestyle(DocState *doc);
+void   DocUpdateTitle(DocState *doc);
 
-/* Cursor movement helpers — return new offset given current pos. */
-short  DocOffsetLeft(short pos);
-short  DocOffsetRight(short pos);
-short  DocOffsetUp(short pos);
-short  DocOffsetDown(short pos);
-short  DocOffsetWordLeft(short pos);
-short  DocOffsetWordRight(short pos);
-short  DocLineStartOffset(short pos);
-short  DocLineEndOffset(short pos);
+/* Line manipulation. */
+void   DocMoveLineUp(DocState *doc);
+void   DocMoveLineDown(DocState *doc);
+void   DocDuplicateLine(DocState *doc);
 
-/* Apply a new cursor offset, either collapsing to a single point
-   (extending=false) or extending the selection from selAnchor
-   (extending=true). Resets selAnchor when not extending. */
-void   DocMoveCursorTo(short newOffset, Boolean extending);
+/* Cursor helpers. */
+short  DocOffsetLeft(DocState *doc, short pos);
+short  DocOffsetRight(DocState *doc, short pos);
+short  DocOffsetUp(DocState *doc, short pos);
+short  DocOffsetDown(DocState *doc, short pos);
+short  DocOffsetWordLeft(DocState *doc, short pos);
+short  DocOffsetWordRight(DocState *doc, short pos);
+short  DocLineStartOffset(DocState *doc, short pos);
+short  DocLineEndOffset(DocState *doc, short pos);
+void   DocMoveCursorTo(DocState *doc, short newOffset, Boolean extending);
 
-/* Insert one tab at the start of the current line. */
-void   DocIndentLine(void);
-/* Remove a single leading tab from the current line if present. */
-void   DocOutdentLine(void);
+/* Indent / outdent (multi-line aware). */
+void   DocIndentLine(DocState *doc);
+void   DocOutdentLine(DocState *doc);
 
-/* Track mouse position and switch cursor between I-beam (over the text
-   area) and arrow (over chrome). Call once per event loop iteration. */
+/* Cursor adjustment (I-beam over text area). */
 void   DocAdjustCursor(void);
 
-/* Undo support. DocBeforeAction snapshots before a discrete operation
-   (paste, indent, line move, etc.). DocBeforeTyping snapshots only on
-   the first keystroke of a typing run; subsequent keystrokes don't
-   snapshot. DocClearUndo throws the snapshot away (used after Open/New).
-   DocUndo swaps current state with the snapshot — repeated Undo
-   alternates undo/redo. */
-void   DocBeforeAction(void);
-void   DocBeforeTyping(void);
-void   DocBreakTypingRun(void);
-void   DocClearUndo(void);
-void   DocUndo(void);
-
-/* Update window title from filename + dirty marker. */
-void   DocUpdateTitle(void);
+/* Undo. */
+void   DocBeforeAction(DocState *doc);
+void   DocBeforeTyping(DocState *doc);
+void   DocBreakTypingRun(DocState *doc);
+void   DocClearUndo(DocState *doc);
+void   DocUndo(DocState *doc);
 
 #endif

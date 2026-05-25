@@ -20,7 +20,7 @@ resource 'WIND' (128, "MdEdit") {
 /* ---- Menu bar ---- */
 
 resource 'MBAR' (128) {
-    { 128, 129, 130, 131 }
+    { 128, 129, 130, 131, 132 }
 };
 
 resource 'MENU' (128, "Apple") {
@@ -70,8 +70,18 @@ resource 'MENU' (131, "Format") {
         "-",                          noIcon, noKey,  noMark, plain;
         "Indent",                     noIcon, "]",    noMark, plain;
         "Outdent",                    noIcon, "[",    noMark, plain;
+        "Duplicate Line",             noIcon, "D",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Re-style Document",          noIcon, noKey,  noMark, plain;
+    }
+};
+
+resource 'MENU' (132, "Windows") {
+    132, textMenuProc, allEnabled, enabled,
+    "Windows",
+    {
+        "Next Window (Cmd-`)",        noIcon, noKey,  noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
     }
 };
 

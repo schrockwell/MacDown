@@ -17,6 +17,14 @@ BASILISKII_APP="$BASILISKII_DIR/BasiliskII.app"
 BASILISKII_BIN="$BASILISKII_APP/Contents/MacOS/BasiliskII"
 PREFS="$BASILISKII_DIR/prefs"
 
+# Bootstrap build/ on first run (or after `make clean`).
+if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    echo "==> Configuring build/ with the Retro68 toolchain"
+    mkdir -p "$BUILD_DIR"
+    (cd "$BUILD_DIR" && cmake "$PROJECT_ROOT" \
+        -DCMAKE_TOOLCHAIN_FILE="$PROJECT_ROOT/deps/retro68/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake")
+fi
+
 cmake --build "$BUILD_DIR"
 
 # Regenerate the project-local prefs file every run. BasiliskII needs
