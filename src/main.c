@@ -58,6 +58,21 @@
 #define kUpArrow    0x1E
 #define kDownArrow  0x1F
 
+/* Virtual key codes. The arrow keys on the Apple Extended Keyboard
+   and the keypad arrows on the Mac Plus produce different char codes
+   when Shift is held -- the Plus keypad flips into num-lock-style
+   mode and emits '+' / '*' / '/' / '=' instead of the arrow chars.
+   Detect by physical keycode instead, which Shift can't change. */
+#define kKC_KP_Left   0x56   /* Plus keypad 4 */
+#define kKC_KP_Right  0x58   /* Plus keypad 6 */
+#define kKC_KP_Down   0x54   /* Plus keypad 2 */
+#define kKC_KP_Up     0x5B   /* Plus keypad 8 */
+#define kKC_Ext_Left  0x7B   /* Extended keyboard left */
+#define kKC_Ext_Right 0x7C   /* Extended keyboard right */
+#define kKC_Ext_Down  0x7D   /* Extended keyboard down */
+#define kKC_Ext_Up    0x7E   /* Extended keyboard up */
+
+
 #define UC(c) ((unsigned char)(c))
 
 static void Initialize(void);
@@ -245,10 +260,24 @@ static void HandleKey(EventRecord *ev)
 {
     DocState *doc = DocActive();
     char    c       = ev->message & charCodeMask;
+    short   keyCode = (ev->message & keyCodeMask) >> 8;
     Boolean shift   = (ev->modifiers & shiftKey)   != 0;
     Boolean cmd     = (ev->modifiers & cmdKey)     != 0;
     Boolean option  = (ev->modifiers & optionKey)  != 0;
     short   pos;
+
+    /* Normalize arrow keys via their virtual keycode (the Plus
+       keypad digits 2/4/6/8 and the Extended Keyboard arrow keys).
+       Shift+arrow on the Plus arrives as a different physical key
+       (the keypad operator row) and we don't try to detect that
+       case here -- text selection by Shift+arrow on a Mac Plus just
+       won't work; use the mouse or Shift+click instead. */
+    switch (keyCode) {
+        case kKC_Ext_Left:  case kKC_KP_Left:  c = kLeftArrow;  break;
+        case kKC_Ext_Right: case kKC_KP_Right: c = kRightArrow; break;
+        case kKC_Ext_Up:    case kKC_KP_Up:    c = kUpArrow;    break;
+        case kKC_Ext_Down:  case kKC_KP_Down:  c = kDownArrow;  break;
+    }
 
     /* Cmd-` cycles to the next window. Done before MenuKey because the
        backtick isn't a real menu key equivalent. */
@@ -505,7 +534,7 @@ static void DrawShortcutsContent(WindowPtr w)
     MoveTo(20, 28);
     DrawString("\pKeyboard Shortcuts");
 
-    /* Geneva 9 for the table — wee bit of room for more rows. */
+    /* Geneva 9 for the table -- wee bit of room for more rows. */
     TextFont(3);          /* Geneva */
     TextSize(9);
     TextFace(0);
