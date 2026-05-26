@@ -27,8 +27,9 @@ resource 'MENU' (128, "Apple") {
     128, textMenuProc, allEnabled, enabled,
     apple,
     {
-        "About MdEdit\0xC9",      noIcon, noKey,  noMark, plain;
-        "-",                      noIcon, noKey,  noMark, plain;
+        "About MdEdit\0xC9",         noIcon, noKey,  noMark, plain;
+        "Keyboard Shortcuts\0xC9",   noIcon, noKey,  noMark, plain;
+        "-",                         noIcon, noKey,  noMark, plain;
     }
 };
 
@@ -57,8 +58,6 @@ resource 'MENU' (130, "Edit") {
         "Paste",                      noIcon, "V",    noMark, plain;
         "Clear",                      noIcon, noKey,  noMark, plain;
         "Select All",                 noIcon, "A",    noMark, plain;
-        "-",                          noIcon, noKey,  noMark, plain;
-        "Delete Word (Opt+Delete)",   noIcon, noKey,  noMark, plain;
     }
 };
 
@@ -91,6 +90,16 @@ resource 'MENU' (132, "Windows") {
 
 resource 'WIND' (129, "About") {
     { 90, 80, 230, 432 },
+    dBoxProc,
+    visible,
+    noGoAway,
+    0x0,
+    "",
+    noAutoCenter
+};
+
+resource 'WIND' (130, "Shortcuts") {
+    { 60, 60, 240, 420 },
     dBoxProc,
     visible,
     noGoAway,

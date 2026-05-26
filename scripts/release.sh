@@ -25,8 +25,10 @@ echo "==> Building MdEdit"
 
 BIN="$BUILD_DIR/MdEdit.bin"
 DSK="$BUILD_DIR/MdEdit.dsk"
-if [ ! -f "$BIN" ] || [ ! -f "$DSK" ]; then
-    echo "error: build outputs missing — $BIN or $DSK not found" >&2
+IMG="$BUILD_DIR/MdEdit.img"
+HQX="$BUILD_DIR/MdEdit.hqx"
+if [ ! -f "$BIN" ] || [ ! -f "$DSK" ] || [ ! -f "$IMG" ]; then
+    echo "error: build outputs missing under $BUILD_DIR" >&2
     exit 1
 fi
 
@@ -35,31 +37,55 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp "$BIN" "$STAGE/MdEdit.bin"
 cp "$DSK" "$STAGE/MdEdit.dsk"
+cp "$IMG" "$STAGE/MdEdit.img"
+[ -f "$HQX" ] && cp "$HQX" "$STAGE/MdEdit.hqx"
 
 cat > "$STAGE/README.txt" <<EOF
 MdEdit — a small Markdown editor for classic Mac OS (System 6.0.8+)
 
 This archive contains two ways to get MdEdit onto a classic Mac:
 
+  MdEdit.hqx
+      BinHex 4.0 — text-only, 7-bit ASCII, embeds the file name, type,
+      creator, Finder flags, and both forks. The most bulletproof
+      classic-Mac transfer format because nothing in the route can
+      strip metadata (every byte is text).
+
+      Real hardware / emulator:
+        drag onto StuffIt Expander on the receiving Mac; it decodes
+        to a real MdEdit application with the correct type / creator
+        / icon in one step.
+
   MdEdit.bin
-      MacBinary II application. The standard classic-Mac transfer
-      format — data fork, resource fork, and Finder info bundled into
-      a single file that survives non-HFS filesystems.
+      MacBinary II application. Data fork, resource fork, and Finder
+      info bundled into a single file. Smaller than .hqx but only
+      survives binary-safe transports.
 
       Basilisk II / SheepShaver:
-        drop MdEdit.bin into the emulator's shared folder; the
-        emulator's File Manager unpacks it automatically.
+        drop into the emulator's shared folder; the File Manager
+        unpacks it automatically.
 
       Real hardware:
-        transfer over a network or floppy, then unpack with StuffIt
-        Expander or any MacBinary-aware utility.
+        transfer and unpack with StuffIt Expander. May need its file
+        type set to 'BINA' on the receiving Mac if the transport
+        stripped Finder metadata.
 
   MdEdit.dsk
-      Disk Copy 4.2 disk image, 800K, containing MdEdit pre-installed.
+      Raw 800K disk image — bytes only, no Disk Copy header.
 
-      Mini vMac:
-        drag-and-drop the .dsk onto the running emulator window, or
-        pass it as a command-line argument when launching.
+      Mini vMac / Basilisk II:
+        drag-and-drop onto the emulator window, or pass it as a
+        command-line argument when launching.
+
+  MdEdit.img
+      Disk Copy 4.2 disk image (same disk content as MdEdit.dsk, but
+      with the 84-byte DC 4.2 header + checksums and type=dCp4).
+
+      Real System 6/7 hardware:
+        copy to the Mac with metadata preserved (AppleShare,
+        AppleDouble FTP, HFS floppy, Floppy Emu). Double-click in the
+        Finder mounts the image via Disk Copy 4.2 / MountImage /
+        ShrinkWrap.
 
 System requirements
   - 68K Macintosh (or PowerPC running 68K emulation)

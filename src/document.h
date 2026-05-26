@@ -16,7 +16,7 @@ struct DocState {
     WindowPtr     window;
     TEHandle      te;
     ControlHandle vScroll;
-    short         vRefNum;
+    short         vRefNum;           /* OWNED wdRefNum (via FileIOOwnWD) */
     Str63         fileName;          /* empty if !hasFile */
     Boolean       hasFile;
     Boolean       dirty;
@@ -40,7 +40,8 @@ extern DocState *gDocs;
 /* Lifecycle. */
 void      DocAppInit(void);                       /* one-time module init */
 DocState *DocNew(void);                           /* create + show new empty doc */
-Boolean   DocOpen(short vRefNum, ConstStr255Param name);
+Boolean   DocOpen(short anyWDRefNum, ConstStr255Param name);
+Boolean   DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name);
 Boolean   DocSave(DocState *doc);
 Boolean   DocSaveAs(DocState *doc);
 Boolean   DocPromptSaveIfDirty(DocState *doc);    /* true = ok to proceed */

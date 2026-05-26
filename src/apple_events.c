@@ -100,7 +100,7 @@ static pascal OSErr HandleODOC(const AppleEvent *ev, AppleEvent *reply, long ref
     for (i = 1; i <= count; i++) {
         err = AEGetNthPtr(&docList, i, typeFSS, &kw, &typ,
                           &fs, sizeof(FSSpec), &actualSize);
-        if (err == noErr) DocOpen(fs.vRefNum, fs.name);
+        if (err == noErr) DocOpenFromDir(fs.vRefNum, fs.parID, fs.name);
     }
 
     AEDisposeDesc(&docList);

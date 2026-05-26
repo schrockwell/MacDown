@@ -100,7 +100,62 @@ static long FoldAndNormalize(char *buf, long len, LineEndKind le,
     return dst;
 }
 
-/* ---- Public API ---- */
+/* ---- wdRefNum ownership ----
+
+   Standard File / 'odoc' Apple Events hand us references to folders.
+   The File Manager's working-directory pool can RECYCLE entries we
+   don't own, so a wdRefNum cached on a document can later point at
+   a different folder and clobber a same-named file there.
+
+   FileIOOwnWD opens a wdRefNum that *we* own via PBOpenWDSync — the
+   system won't recycle it until we PBCloseWDSync. From that point on
+   every file op uses the classic System-1-era (vRefNum, name) calls
+   that work universally on System 6 / Mini vMac and don't have the
+   reliability problems of the H- or PBH-prefixed variants. */
+
+OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD)
+{
+    WDPBRec pb;
+    OSErr err;
+    pb.ioCompletion = NULL;
+    pb.ioNamePtr    = NULL;
+    pb.ioVRefNum    = vRefNum;
+    pb.ioWDDirID    = dirID;
+    pb.ioWDProcID   = 'MDED';
+    err = PBOpenWDSync(&pb);
+    if (err != noErr) return err;
+    if (outOwnedWD) *outOwnedWD = pb.ioVRefNum;
+    return noErr;
+}
+
+OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD)
+{
+    WDPBRec pb;
+    OSErr err;
+    /* Resolve whatever ref we were given (may already be a real
+       vRefNum, may be a wdRefNum from SF) into (vRefNum, dirID). */
+    pb.ioCompletion = NULL;
+    pb.ioNamePtr    = NULL;
+    pb.ioVRefNum    = anyWDRefNum;
+    pb.ioWDIndex    = 0;
+    pb.ioWDProcID   = 0;
+    pb.ioWDVRefNum  = 0;
+    err = PBGetWDInfoSync(&pb);
+    if (err != noErr) return err;
+    return FileIOOwnWDFromDir(pb.ioWDVRefNum, pb.ioWDDirID, outOwnedWD);
+}
+
+void FileIOReleaseWD(short ownedWD)
+{
+    WDPBRec pb;
+    if (ownedWD == 0) return;
+    pb.ioCompletion = NULL;
+    pb.ioNamePtr    = NULL;
+    pb.ioVRefNum    = ownedWD;
+    (void) PBCloseWDSync(&pb);
+}
+
+/* ---- File ops ---- Plain non-H calls; the vRefNum is an owned wdRefNum. */
 
 OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
                     Handle *outData,
@@ -115,9 +170,6 @@ OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
     LineEndKind le;
     long folded;
 
-    /* FSOpen is the original (System 1+) call — takes vRefNum + name
-       and uses the volume's working directory. Works with the
-       wdRefNum that Standard File hands us. */
     err = FSOpen(name, vRefNum, &refNum);
     if (err != noErr) return err;
 
@@ -126,7 +178,7 @@ OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
 
     if (eof > kMdMaxFileBytes) {
         FSClose(refNum);
-        return -1;  /* sentinel: too big */
+        return -1;
     }
 
     h = NewHandle(eof);
@@ -167,10 +219,6 @@ OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
     long i;
     long writeLen;
 
-    /* Build the full output buffer in memory with line endings converted
-       once, then a single FSWrite. Simpler than streaming-with-batches
-       and avoids any per-line FSWrite cost on slow disks. Worst-case
-       expansion is 2x (every CR becomes CRLF). */
     {
         long outMax = (le == kLE_CRLF) ? (len * 2L + 2L) : (len + 1L);
         if (outMax < 1) outMax = 1;
@@ -195,10 +243,6 @@ OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
         }
     }
 
-    /* Canonical classic-Mac save sequence (Inside Macintosh: Files):
-       delete the old version, create fresh, open for writing, write,
-       close. All non-H calls — they take a plain vRefNum (which can
-       be a wdRefNum from Standard File) and don't need a dirID. */
     (void) FSDelete(name, vRefNum);  /* fnfErr is fine, ignore all errors */
 
     err = Create(name, vRefNum, 'MDED', 'TEXT');
@@ -224,20 +268,37 @@ done:
 OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
                               OSType type, OSType creator)
 {
-    FInfo fi;
+    ParamBlockRec pb;
     OSErr err;
+    short i;
 
-    /* GetFInfo/SetFInfo are the original (System 1+) calls — they
-       take a plain vRefNum (which can be a wdRefNum from Standard
-       File) and work on every Mac OS. The PB-prefixed variants used
-       previously were System 7-era and could fail silently on
-       System 6, leaving the file with the wrong creator and thereby
-       breaking double-click-to-open in the Finder. */
-    err = GetFInfo(name, vRefNum, &fi);
+    /* The Multiversal Interfaces `SetFInfo` glue doesn't clear
+       ioFDirIndex before calling PBGetFInfoSync. If the stack has
+       nonzero garbage there, PBGetFInfoSync does an *indexed* lookup,
+       returns a random file's FInfo, AND overwrites the caller's name
+       buffer (ioNamePtr) with the indexed file's name — clobbering
+       doc->fileName and then setting the type/creator on the wrong
+       file. We bypass the glue and zero the whole block first. */
+    {
+        char *p = (char *)&pb;
+        for (i = 0; i < (short)sizeof(pb); i++) p[i] = 0;
+    }
+    pb.fileParam.ioNamePtr   = (StringPtr)name;
+    pb.fileParam.ioVRefNum   = vRefNum;
+    pb.fileParam.ioFVersNum  = 0;
+    pb.fileParam.ioFDirIndex = 0;   /* lookup by NAME, not by index */
+    err = PBGetFInfoSync(&pb);
     if (err != noErr) return err;
 
-    fi.fdType    = type;
-    fi.fdCreator = creator;
+    pb.fileParam.ioFlFndrInfo.fdType    = type;
+    pb.fileParam.ioFlFndrInfo.fdCreator = creator;
 
-    return SetFInfo(name, vRefNum, &fi);
+    /* Restore fields PBGetFInfoSync may have clobbered before the
+       set call. ioNamePtr in particular gets overwritten on indexed
+       lookups; we always restore as defense in depth. */
+    pb.fileParam.ioNamePtr   = (StringPtr)name;
+    pb.fileParam.ioVRefNum   = vRefNum;
+    pb.fileParam.ioFVersNum  = 0;
+    pb.fileParam.ioFDirIndex = 0;
+    return PBSetFInfoSync(&pb);
 }

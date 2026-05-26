@@ -275,6 +275,7 @@ Boolean DocClose(DocState *doc)
     }
 
     DocClearUndo(doc);
+    if (doc->hasFile) FileIOReleaseWD(doc->vRefNum);
     if (doc->te)      TEDispose(doc->te);
     if (doc->window)  DisposeWindow(doc->window);
     DisposePtr((Ptr)doc);
@@ -324,7 +325,7 @@ static void ClearDocText(DocState *doc)
     doc->dirtyLineStart = doc->dirtyLineEnd = -1;
 }
 
-Boolean DocOpen(short vRefNum, ConstStr255Param name)
+static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 {
     Handle data = NULL;
     LineEndKind le;
@@ -335,25 +336,27 @@ Boolean DocOpen(short vRefNum, ConstStr255Param name)
     DocState *doc;
     Boolean reusedEmpty;
 
-    err = FileIOReadDoc(vRefNum, name, &data, &le, &folded);
-    if (err == -1) { ShowError(kErrTooBig); return false; }
-    if (err != noErr) { ShowError(kErrCantOpen); return false; }
+    err = FileIOReadDoc(ownedWD, name, &data, &le, &folded);
+    if (err == -1)    { FileIOReleaseWD(ownedWD); ShowError(kErrTooBig);  return false; }
+    if (err != noErr) { FileIOReleaseWD(ownedWD); ShowError(kErrCantOpen); return false; }
 
     len = GetHandleSize(data);
     if (len > kMdMaxFileBytes) {
         DisposeHandle(data);
+        FileIOReleaseWD(ownedWD);
         ShowError(kErrTooBig);
         return false;
     }
 
-    /* If the only window is an empty untitled doc, load into it.
-       Otherwise spawn a new window. */
     doc = FindEmptyUntitledDoc();
     reusedEmpty = (doc != NULL);
     if (!reusedEmpty) {
         doc = DocNew();
-        if (doc == NULL) { DisposeHandle(data); return false; }
+        if (doc == NULL) { DisposeHandle(data); FileIOReleaseWD(ownedWD); return false; }
     }
+
+    /* If reused, release the old doc's wdRefNum before stomping it. */
+    if (reusedEmpty && doc->hasFile) FileIOReleaseWD(doc->vRefNum);
 
     ClearDocText(doc);
     HLock(data);
@@ -362,7 +365,7 @@ Boolean DocOpen(short vRefNum, ConstStr255Param name)
     DisposeHandle(data);
 
     doc->hasFile = true;
-    doc->vRefNum = vRefNum;
+    doc->vRefNum = ownedWD;
     doc->fileName[0] = name[0];
     for (i = 1; i <= name[0]; i++) doc->fileName[i] = name[i];
     doc->leKind = le;
@@ -381,6 +384,30 @@ Boolean DocOpen(short vRefNum, ConstStr255Param name)
 
     if (folded > 0) ShowError(kErrFolded);
     return true;
+}
+
+/* Take any folder ref (a wdRefNum from Standard File / AppFile, or
+   even a plain volume ref) and own it before opening the document. */
+Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
+{
+    short ownedWD;
+    if (FileIOOwnWD(anyWDRefNum, &ownedWD) != noErr) {
+        ShowError(kErrCantOpen);
+        return false;
+    }
+    return DocOpenWithOwnedWD(ownedWD, name);
+}
+
+/* FSSpec callers (Apple Event 'odoc') already have a real (vRefNum,
+   parID) pair — open our own wdRefNum directly from those. */
+Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
+{
+    short ownedWD;
+    if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr) {
+        ShowError(kErrCantOpen);
+        return false;
+    }
+    return DocOpenWithOwnedWD(ownedWD, name);
 }
 
 Boolean DocSave(DocState *doc)
@@ -460,7 +487,16 @@ Boolean DocSaveAs(DocState *doc)
 
     if (!reply.good) return false;
 
-    doc->vRefNum     = reply.vRefNum;
+    /* Own a wdRefNum for the chosen folder so the slot can't be
+       recycled out from under us between this save and the next. */
+    {
+        short ownedWD;
+        OSErr err = FileIOOwnWD(reply.vRefNum, &ownedWD);
+        if (err != noErr) { ShowError(kErrCantSave); return false; }
+        if (doc->hasFile) FileIOReleaseWD(doc->vRefNum);
+        doc->vRefNum = ownedWD;
+    }
+
     doc->fileName[0] = reply.fName[0];
     for (i = 1; i <= reply.fName[0]; i++)
         doc->fileName[i] = reply.fName[i];

@@ -42,7 +42,6 @@
 #define kEditPaste    5
 #define kEditClear    6
 #define kEditSelAll   7
-#define kEditDeleteWord 9
 
 #define kFormatToggleTask 1
 #define kFormatIndent     3
@@ -50,7 +49,8 @@
 #define kFormatDuplicate  5
 #define kFormatRestyleAll 7
 
-#define kAboutItem    1
+#define kAboutItem      1
+#define kShortcutsItem  2
 #define kRestyleIdleTicks 6L
 
 #define kLeftArrow  0x1C
@@ -98,7 +98,8 @@ static void Initialize(void)
     DocAppInit();
 }
 
-/* System 6 launch-with-files: open every dropped file. */
+/* System 6 launch-with-files: open every dropped file. DocOpen owns
+   the wdRefNum internally so it can't be recycled later. */
 static void OpenFromFinderLaunch(void)
 {
     short msg, count, i;
@@ -484,7 +485,52 @@ static void DrawAboutContent(WindowPtr w)
     TextFace(0);
 }
 
-static void DoAbout(void)
+static void DrawShortcutRow(short y, ConstStr255Param label, ConstStr255Param shortcut)
+{
+    MoveTo(20, y);
+    DrawString(label);
+    MoveTo(180, y);
+    DrawString(shortcut);
+}
+
+static void DrawShortcutsContent(WindowPtr w)
+{
+    Rect r = w->portRect;
+    short y;
+    EraseRect(&r);
+
+    TextFont(0);          /* system (Chicago) */
+    TextSize(12);
+    TextFace(bold);
+    MoveTo(20, 28);
+    DrawString("\pKeyboard Shortcuts");
+
+    /* Geneva 9 for the table — wee bit of room for more rows. */
+    TextFont(3);          /* Geneva */
+    TextSize(9);
+    TextFace(0);
+
+    y = 56;
+    DrawShortcutRow(y, "\pMove One Word",          "\pOption + Left / Right");
+    y += 16;
+    DrawShortcutRow(y, "\pDelete Word",            "\pOption + Delete");
+    y += 16;
+    DrawShortcutRow(y, "\pMove Line",              "\pOption + Up / Down");
+    y += 16;
+    DrawShortcutRow(y, "\pStart / End of Line",    "\pCommand + Left / Right");
+    y += 16;
+    DrawShortcutRow(y, "\pText Selection",         "\pHold Shift");
+
+    TextFace(italic);
+    MoveTo(20, y + 28);
+    DrawString("\p(click anywhere to dismiss)");
+    TextFace(0);
+}
+
+/* Show a plain-bordered window and pump events until any mouse/key
+   dismisses it. Other windows' update events are forwarded so they
+   keep painting if the modal moves or uncovers them. */
+static void ShowModalSplash(short windID, void (*draw)(WindowPtr))
 {
     WindowPtr w;
     GrafPtr   savedPort;
@@ -492,15 +538,13 @@ static void DoAbout(void)
     Boolean done = false;
 
     InitCursor();
-    w = GetNewWindow(129, NULL, (WindowPtr)-1L);
+    w = GetNewWindow(windID, NULL, (WindowPtr)-1L);
     if (w == NULL) return;
 
     GetPort(&savedPort);
     SetPort(w);
-    DrawAboutContent(w);
+    draw(w);
 
-    /* Modal wait — any mouse or key dismisses; pass through update
-       events to other windows so they keep painting if uncovered. */
     while (!done) {
         if (WaitNextEvent(everyEvent, &ev, 6, NULL)) {
             switch (ev.what) {
@@ -514,7 +558,7 @@ static void DoAbout(void)
                     if (uw == w) {
                         SetPort(w);
                         BeginUpdate(w);
-                        DrawAboutContent(w);
+                        draw(w);
                         EndUpdate(w);
                     } else {
                         DocState *d = DocFromWindow(uw);
@@ -529,6 +573,9 @@ static void DoAbout(void)
     DisposeWindow(w);
     SetPort(savedPort);
 }
+
+static void DoAbout(void)     { ShowModalSplash(129, DrawAboutContent);     }
+static void DoShortcuts(void) { ShowModalSplash(130, DrawShortcutsContent); }
 
 static void DoFileOpen(void)
 {
@@ -577,6 +624,8 @@ static void HandleMenu(long mResult)
         case kAppleMenuID:
             if (item == kAboutItem) {
                 DoAbout();
+            } else if (item == kShortcutsItem) {
+                DoShortcuts();
             } else {
                 Str255 daName;
                 GetMenuItemText(GetMenuHandle(kAppleMenuID), item, daName);
@@ -619,7 +668,6 @@ static void HandleMenu(long mResult)
                 case kEditSelAll: DocBreakTypingRun(doc);
                                   TESetSelect(0, 32767, doc->te);
                                   break;
-                case kEditDeleteWord: DocBeforeAction(doc); DoDeleteWordBack(doc); break;
             }
             if (doc) DocAdjustScrollbar(doc);
             break;
