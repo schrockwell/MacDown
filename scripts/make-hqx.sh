@@ -1,5 +1,5 @@
 #!/bin/bash
-# Produce a BinHex 4.0 (.hqx) file from MdEdit.bin.
+# Produce a BinHex 4.0 (.hqx) file from MacDown.bin.
 #
 # BinHex is text-safe and self-contained: it embeds the file name,
 # type, creator, Finder flags, and both forks into a 7-bit ASCII
@@ -36,7 +36,7 @@ done
 
 # Stage the decoded file in a fresh temp dir so its name/forks survive
 # even if a previous run left junk behind.
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/mdedit-hqx-XXXXXX")"
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/MacDown-hqx-XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 /usr/bin/macbinary decode -C "$STAGE" "$SRC" >/dev/null 2>&1

@@ -13,7 +13,7 @@ help:
 	@echo "  make build          cmake --build build/  (compile the project)"
 	@echo "  make basiliskii     Build and run in Basilisk II"
 	@echo "  make minivmac       Build and (re)launch Mini vMac"
-	@echo "  make release        Package build/ into release/MdEdit-<date>.zip"
+	@echo "  make release        Package build/ into release/MacDown-<date>.zip"
 	@echo "  make clean          Remove build/"
 
 setup:

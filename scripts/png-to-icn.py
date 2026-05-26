@@ -5,7 +5,7 @@ Usage:
     scripts/png-to-icn.py <app.png> <document.png>
 
 Emits two `resource 'ICN#'` definitions on stdout (128 for the app icon,
-129 for the document icon), ready to paste into resources/MdEdit.r.
+129 for the document icon), ready to paste into resources/MacDown.r.
 
 Each ICN# resource is 256 bytes: 128 bytes of 1-bit image data followed
 by 128 bytes of mask. Within Rez, both blocks are written as a sequence

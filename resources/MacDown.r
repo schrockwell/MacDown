@@ -7,7 +7,7 @@
 
 /* ---- Main document window ---- */
 
-resource 'WIND' (128, "MdEdit") {
+resource 'WIND' (128, "MacDown") {
     { 80, 56, 270, 456 },    /* 400x190 — small enough to leave room, top=80 */
     zoomDocProc,
     visible,
@@ -27,7 +27,7 @@ resource 'MENU' (128, "Apple") {
     128, textMenuProc, allEnabled, enabled,
     apple,
     {
-        "About MdEdit\0xC9",         noIcon, noKey,  noMark, plain;
+        "About MacDown\0xC9",         noIcon, noKey,  noMark, plain;
         "Keyboard Shortcuts\0xC9",   noIcon, noKey,  noMark, plain;
         "-",                         noIcon, noKey,  noMark, plain;
     }
@@ -173,7 +173,7 @@ resource 'FREF' (129) {
 /* App signature for the Finder. Pair with creator 'MDED' set on output. */
 type 'MDED' as 'STR ';
 resource 'MDED' (0, "Owner resource") {
-    "MdEdit 1.0"
+    "MacDown 1.0"
 };
 
 /* App / document icons — generated from app.png / document.png by

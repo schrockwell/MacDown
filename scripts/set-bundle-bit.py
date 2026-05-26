@@ -18,7 +18,7 @@ Handles two output formats:
     over bytes 0-123 (MacBinary II CRC-CCITT, init 0, poly 0x1021)
     so both MB I and MB II decoders accept the patched file.
 
-  * AppleDouble — sidecar layout (e.g. `%MdEdit.ad`) with a header
+  * AppleDouble — sidecar layout (e.g. `%MacDown.ad`) with a header
     pointing to a Finder Info entry (ID 9). The first byte of the
     flags inside the FInfo struct gets the bundle bit set.
 """

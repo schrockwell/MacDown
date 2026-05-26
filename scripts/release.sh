@@ -1,5 +1,5 @@
 #!/bin/bash
-# Package MdEdit into a redistributable zip with the .bin (MacBinary —
+# Package MacDown into a redistributable zip with the .bin (MacBinary —
 # the universal classic-Mac container) and a .dsk (Disk Copy 4.2 image
 # for Mini vMac), plus a short README. The zip is the broadest-reach
 # format: modern users on any OS can unzip it, then route the .bin
@@ -15,18 +15,18 @@ BUILD_DIR="$PROJECT_ROOT/build"
 RELEASE_DIR="$PROJECT_ROOT/release"
 
 TAG="${1:-$(date +%Y%m%d)}"
-NAME="MdEdit-$TAG"
+NAME="MacDown-$TAG"
 STAGE="$RELEASE_DIR/$NAME"
 
 # Always build first so the release reflects current source. Reuses the
 # auto-configure path in `make build` if build/ is missing.
-echo "==> Building MdEdit"
+echo "==> Building MacDown"
 (cd "$PROJECT_ROOT" && make build >/dev/null)
 
-BIN="$BUILD_DIR/MdEdit.bin"
-DSK="$BUILD_DIR/MdEdit.dsk"
-IMG="$BUILD_DIR/MdEdit.img"
-HQX="$BUILD_DIR/MdEdit.hqx"
+BIN="$BUILD_DIR/MacDown.bin"
+DSK="$BUILD_DIR/MacDown.dsk"
+IMG="$BUILD_DIR/MacDown.img"
+HQX="$BUILD_DIR/MacDown.hqx"
 if [ ! -f "$BIN" ] || [ ! -f "$DSK" ] || [ ! -f "$IMG" ]; then
     echo "error: build outputs missing under $BUILD_DIR" >&2
     exit 1
@@ -35,17 +35,17 @@ fi
 echo "==> Staging $NAME/"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp "$BIN" "$STAGE/MdEdit.bin"
-cp "$DSK" "$STAGE/MdEdit.dsk"
-cp "$IMG" "$STAGE/MdEdit.img"
-[ -f "$HQX" ] && cp "$HQX" "$STAGE/MdEdit.hqx"
+cp "$BIN" "$STAGE/MacDown.bin"
+cp "$DSK" "$STAGE/MacDown.dsk"
+cp "$IMG" "$STAGE/MacDown.img"
+[ -f "$HQX" ] && cp "$HQX" "$STAGE/MacDown.hqx"
 
 cat > "$STAGE/README.txt" <<EOF
-MdEdit — a small Markdown editor for classic Mac OS (System 6.0.8+)
+MacDown — a small Markdown editor for classic Mac OS (System 6.0.8+)
 
-This archive contains two ways to get MdEdit onto a classic Mac:
+This archive contains two ways to get MacDown onto a classic Mac:
 
-  MdEdit.hqx
+  MacDown.hqx
       BinHex 4.0 — text-only, 7-bit ASCII, embeds the file name, type,
       creator, Finder flags, and both forks. The most bulletproof
       classic-Mac transfer format because nothing in the route can
@@ -53,10 +53,10 @@ This archive contains two ways to get MdEdit onto a classic Mac:
 
       Real hardware / emulator:
         drag onto StuffIt Expander on the receiving Mac; it decodes
-        to a real MdEdit application with the correct type / creator
+        to a real MacDown application with the correct type / creator
         / icon in one step.
 
-  MdEdit.bin
+  MacDown.bin
       MacBinary II application. Data fork, resource fork, and Finder
       info bundled into a single file. Smaller than .hqx but only
       survives binary-safe transports.
@@ -70,15 +70,15 @@ This archive contains two ways to get MdEdit onto a classic Mac:
         type set to 'BINA' on the receiving Mac if the transport
         stripped Finder metadata.
 
-  MdEdit.dsk
+  MacDown.dsk
       Raw 800K disk image — bytes only, no Disk Copy header.
 
       Mini vMac / Basilisk II:
         drag-and-drop onto the emulator window, or pass it as a
         command-line argument when launching.
 
-  MdEdit.img
-      Disk Copy 4.2 disk image (same disk content as MdEdit.dsk, but
+  MacDown.img
+      Disk Copy 4.2 disk image (same disk content as MacDown.dsk, but
       with the 84-byte DC 4.2 header + checksums and type=dCp4).
 
       Real System 6/7 hardware:
