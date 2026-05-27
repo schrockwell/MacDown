@@ -38,4 +38,9 @@ void BrowserResize(void);
    WaitNextEvent timeout. */
 void BrowserIdle(void);
 
+/* If the browser window is currently open AND visible, fill outVRef /
+   outDirID with the folder it's showing and return true. Used by the
+   Save dialog to default to the browser's directory when present. */
+Boolean BrowserCurrentFolder(short *outVRef, long *outDirID);
+
 #endif

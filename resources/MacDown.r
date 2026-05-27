@@ -172,6 +172,43 @@ resource 'DITL' (129, "Save Changes") {
     }
 };
 
+/* ---- New Folder prompt (browser toolbar "+" button) ----
+
+   Item 5 is a userItem we paint with a 3-px rounded outline around the
+   Create button at runtime — the classic-Mac convention for marking a
+   default button on dialogs without using System 7's
+   SetDialogDefaultItem (which doesn't exist on 6.0.8). */
+
+resource 'DLOG' (130, "New Folder") {
+    { 80, 80, 200, 380 },
+    movableDBoxProc,
+    visible,
+    noGoAway,
+    0x0,
+    130,
+    "",
+    centerMainScreen
+};
+
+resource 'DITL' (130, "New Folder") {
+    {
+        { 84, 220, 104, 280 },
+        Button { enabled, "Create" };
+
+        { 84, 140, 104, 200 },
+        Button { enabled, "Cancel" };
+
+        { 12, 12, 32, 288 },
+        StaticText { disabled, "Folder name:" };
+
+        { 40, 12, 60, 288 },
+        EditText { enabled, "Untitled folder" };
+
+        { 80, 216, 108, 284 },
+        UserItem { disabled };
+    }
+};
+
 /* ---- Error / info strings ---- */
 
 resource 'STR#' (128, "Errors") {

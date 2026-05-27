@@ -15,6 +15,7 @@
 #include <Multiverse.h>
 
 #include "markdown.h"
+#include "browser.h"
 #include "file_io.h"
 
 #define kWindowID 128
@@ -692,6 +693,19 @@ Boolean DocSaveAs(DocState *doc)
     GetPort(&savedPort);
     SetPort(doc->window);
     InitCursor();
+
+    /* Default the Save dialog to the browser's folder if it's visible,
+       so the user can drop new files alongside whatever they're
+       browsing. SFPutFile reads the starting location from the LM
+       globals SFSaveDisk (negated vRefNum) and CurDirStore (dirID). */
+    {
+        short bvRef;
+        long  bDirID;
+        if (BrowserCurrentFolder(&bvRef, &bDirID)) {
+            LMSetSFSaveDisk(-bvRef);
+            LMSetCurDirStore(bDirID);
+        }
+    }
 
     where.h = 80;
     where.v = 60;

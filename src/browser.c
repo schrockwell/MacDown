@@ -82,6 +82,7 @@ static ControlHandle gScrollBar = NULL;
    by a window resize. */
 static Rect gParentBtnR;   /* ".." -> go to parent */
 static Rect gGoBtnR;       /* "go" -> Go to... dialog */
+static Rect gNewBtnR;      /* "+"  -> new folder in current dir */
 
 static long      gLastClickTime = 0;
 static short     gLastClickRow  = -1;
@@ -140,6 +141,7 @@ static void OffscreenCopyAndEnd(GrafPtr dest, const Rect *r)
 
 /* ---- forward decls ---- */
 static Boolean BrowserPickFolder(short *outVRef, long *outDirID);
+static void    BrowserCreateNewFolder(void);
 static void    BrowserComputeButtonRects(void);
 static void    BrowserDrawButton(const Rect *r, ConstStr255Param title, Boolean pressed);
 static void    BrowserDrawButtons(void);
@@ -185,6 +187,11 @@ static void BrowserComputeButtonRects(void)
     gGoBtnR.bottom = kButtonTopPad + kButtonHeight;
     gGoBtnR.left   = x;
     gGoBtnR.right  = x + kButtonWidth;
+    x = gGoBtnR.right + kButtonGap;
+    gNewBtnR.top    = kButtonTopPad;
+    gNewBtnR.bottom = kButtonTopPad + kButtonHeight;
+    gNewBtnR.left   = x;
+    gNewBtnR.right  = x + kButtonWidth;
 }
 
 static void BrowserDrawButton(const Rect *r, ConstStr255Param title, Boolean pressed)
@@ -239,6 +246,7 @@ static void BrowserDrawButtons(void)
     EraseRect(&strip);
     BrowserDrawButton(&gParentBtnR, "\p..", false);
     BrowserDrawButton(&gGoBtnR,     "\pgo", false);
+    BrowserDrawButton(&gNewBtnR,    "\p+",  false);
 }
 
 static void BrowserDrawChrome(void)
@@ -443,6 +451,111 @@ static void BrowserEnsureDefault(void)
     }
     gFolderID = 2;            /* HFS volume root */
     gFolderName[0] = 0;
+}
+
+/* ---- New Folder prompt ----
+
+   DLOG/DITL 130: edit-text field + Create/Cancel buttons + a userItem
+   we draw as a 3-px rounded outline around the Create button (the
+   classic-Mac default-button convention; predates SetDialogDefaultItem
+   which is System 7+). Return invokes Create, Escape invokes Cancel. */
+
+static pascal void DrawDefaultBtnOutline(DialogPtr dlg, short itemNo)
+{
+    short itype;
+    Handle ihdl;
+    Rect r;
+    PenState saved;
+    GetDialogItem(dlg, itemNo, &itype, &ihdl, &r);
+    GetPenState(&saved);
+    PenNormal();
+    PenSize(3, 3);
+    FrameRoundRect(&r, 16, 16);
+    SetPenState(&saved);
+}
+
+static pascal Boolean NewFolderFilter(DialogPtr dlg, EventRecord *ev, short *itemHit)
+{
+    if (ev->what == keyDown || ev->what == autoKey) {
+        char c = ev->message & charCodeMask;
+        if (c == '\r' || c == 0x03) { *itemHit = 1; return true; }
+        if (c == 0x1B)              { *itemHit = 2; return true; }
+    }
+    (void)dlg;
+    return false;
+}
+
+static Boolean BrowserPromptFolderName(StringPtr outName)
+{
+    DialogPtr dlg;
+    short itype;
+    Handle ihdl;
+    Rect ir;
+    short hit;
+    ModalFilterUPP filter;
+    UserItemUPP outlineUPP;
+    Str255 entered;
+
+    outName[0] = 0;
+    dlg = GetNewDialog(130, NULL, (WindowPtr)-1L);
+    if (dlg == NULL) return false;
+
+    /* Install the default-button outline draw proc on item 5. */
+    outlineUPP = NewUserItemProc(DrawDefaultBtnOutline);
+    GetDialogItem(dlg, 5, &itype, &ihdl, &ir);
+    SetDialogItem(dlg, 5, itype, (Handle)outlineUPP, &ir);
+
+    /* Pre-select the default name so typing replaces it. */
+    SelectDialogItemText(dlg, 4, 0, 32767);
+
+    ShowWindow(dlg);
+    SetPort(dlg);
+    filter = NewModalFilterProc(NewFolderFilter);
+
+    for (;;) {
+        ModalDialog(filter, &hit);
+        if (hit == 1 || hit == 2) break;
+    }
+
+    if (hit == 1) {
+        GetDialogItem(dlg, 4, &itype, &ihdl, &ir);
+        if (ihdl != NULL) {
+            GetDialogItemText(ihdl, entered);
+            if (entered[0] > 63) entered[0] = 63;
+            StrCopy(outName, entered);
+        }
+    }
+
+    DisposeRoutineDescriptor((UniversalProcPtr)filter);
+    DisposeRoutineDescriptor((UniversalProcPtr)outlineUPP);
+    DisposeDialog(dlg);
+    return (hit == 1 && outName[0] > 0);
+}
+
+static void BrowserCreateNewFolder(void)
+{
+    Str63 name;
+    HParamBlockRec pb;
+    short i;
+    OSErr err;
+
+    if (!BrowserPromptFolderName(name)) return;
+
+    {
+        char *p = (char *)&pb;
+        for (i = 0; i < (short)sizeof(pb); i++) p[i] = 0;
+    }
+    pb.fileParam.ioNamePtr = (StringPtr)name;
+    pb.fileParam.ioVRefNum = gFolderVRef;
+    pb.fileParam.ioDirID   = gFolderID;
+    err = PBDirCreateSync(&pb);
+    if (err != noErr) {
+        SysBeep(1);
+        return;
+    }
+
+    BrowserLoadCurrent();
+    BrowserDrawList();
 }
 
 /* ---- enumerate + reload ---- */
@@ -806,6 +919,13 @@ void BrowserClick(EventRecord *ev)
         SetPort(savedPort);
         return;
     }
+    if (PtInRect(local, &gNewBtnR)) {
+        if (BrowserTrackButton(&gNewBtnR, "\p+")) {
+            BrowserCreateNewFolder();
+        }
+        SetPort(savedPort);
+        return;
+    }
 
     /* Scrollbar hit-test. */
     if (gScrollBar) {
@@ -899,6 +1019,15 @@ void BrowserIdle(void)
        starts at top (BrowserLoadCurrent zeroes gTopIdx). */
     BrowserLoadCurrent();
     BrowserDrawList();
+}
+
+Boolean BrowserCurrentFolder(short *outVRef, long *outDirID)
+{
+    if (gWindow == NULL || !((WindowPeek)gWindow)->visible) return false;
+    if (gFolderID == 0) return false;
+    if (outVRef)  *outVRef  = gFolderVRef;
+    if (outDirID) *outDirID = gFolderID;
+    return true;
 }
 
 void BrowserResize(void)
