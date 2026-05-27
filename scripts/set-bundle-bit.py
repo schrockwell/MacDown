@@ -50,29 +50,17 @@ def patch_macbinary(path: Path) -> str:
     if data[0] != 0 or data[74] != 0:
         return "skipped: header byte 0 / 74 not zero (not MacBinary)"
 
-    changed = False
-
-    # Set 'has bundle' bit in the Finder flags so System 6's Finder
-    # processes the BNDL / ICN# chain on desktop rebuild.
-    if not (data[73] & BUNDLE_BIT):
-        data[73] |= BUNDLE_BIT
-        changed = True
-
-    # Retro68 emits MB-I-style version bytes (0x00 / 0x00) but writes
-    # a non-zero CRC at offsets 124-125 — the file is structurally MB
-    # II. Strict decoders (StuffIt Deluxe, some older utilities) read
-    # the version bytes first and refuse a file whose "MB I" header
-    # has MB II features. Normalize to 0x81 / 0x81 (= "MacBinary II,
-    # decodable by MacBinary II readers and up") so the version and
-    # the data agree.
-    if data[122] == 0x00 and data[123] == 0x00:
-        data[122] = 0x81
-        data[123] = 0x81
-        changed = True
-
-    if not changed:
+    # Set 'has bundle' bit (high byte of Finder flags) and recompute
+    # the CRC at offsets 124-125 so decoders that verify it accept
+    # the modified file. We deliberately do NOT touch the version
+    # bytes (122-123): Basilisk II's ExtFS only accepts the MacBinary I
+    # form Retro68 emits and rejects an explicit MB II marker; many
+    # other decoders sniff the file's MB version from the CRC field's
+    # value rather than from the version bytes, so a correct CRC keeps
+    # everyone happy.
+    if data[73] & BUNDLE_BIT:
         return "already set"
-
+    data[73] |= BUNDLE_BIT
     crc = crc16_ccitt(bytes(data[:124]))
     data[124] = (crc >> 8) & 0xFF
     data[125] = crc & 0xFF
