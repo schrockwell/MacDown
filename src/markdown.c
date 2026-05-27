@@ -106,6 +106,18 @@ static Boolean IsWordChar(char c)
            u >= 0x80;  /* MacRoman extended chars treated as word chars */
 }
 
+/* Counter of "real" style mutations applied since the last consume.
+   DocFlushRestyle reads it after restyling its dirty range to decide
+   whether the on-screen repaint is needed at all. */
+static long sStyleChanges = 0;
+
+short MdConsumeStyleChanges(void)
+{
+    short n = (sStyleChanges > 32767) ? 32767 : (short)sStyleChanges;
+    sStyleChanges = 0;
+    return n;
+}
+
 static void ApplyFace(TEHandle te, short start, short end, short face)
 {
     TextStyle ts;
@@ -115,6 +127,7 @@ static void ApplyFace(TEHandle te, short start, short end, short face)
     ts.tsColor.red = ts.tsColor.green = ts.tsColor.blue = 0;
     TESetSelect(start, end, te);
     TESetStyle(doFace, &ts, false, te);
+    sStyleChanges++;
 }
 
 /* Scan one line for *...*, **...**, _..._, __...__ runs and bold their
@@ -200,6 +213,37 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
     lineLen = lineEnd - lineStart;
     if (lineLen < 0) lineLen = 0;
 
+    /* Fast no-op detection: if the line classifies as plain, has no
+       emphasis markers, and already has the default style at its first
+       character, the restyle is guaranteed to produce no visible
+       change -- skip everything and don't bump sStyleChanges.  The
+       caller (DocFlushRestyle) then skips its offscreen repaint. */
+    if (lineLen > 0) {
+        Boolean canSkip = true;
+        short i;
+        TextStyle current;
+        short lh, fa;
+
+        ch = TEGetText(te);
+        HLock((Handle)ch);
+        text = *ch + lineStart;
+
+        if (MdClassifyLine(text, lineLen) != kLine_Plain) {
+            canSkip = false;
+        } else {
+            for (i = 0; i < lineLen; i++) {
+                if (text[i] == '*' || text[i] == '_') { canSkip = false; break; }
+            }
+        }
+        HUnlock((Handle)ch);
+
+        if (canSkip) {
+            TEGetStyle(lineStart, &current, &lh, &fa, te);
+            if (current.tsFace == 0 && current.tsSize == 12)
+                return;
+        }
+    }
+
     /* Reset the whole line to plain size 12 first so previous styling
        doesn't leak. Font is left alone -- we don't restyle by font. */
     base.tsFont = 0;
@@ -209,6 +253,7 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
     TESetSelect(lineStart, lineEnd, te);
     TESetStyle(faceMask, &base, false, te);
+    sStyleChanges++;
 
     if (lineLen == 0) {
         TESetSelect(savedStart, savedEnd, te);
@@ -237,9 +282,10 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
     if (kind != kLine_Plain) {
         TESetSelect(lineStart, lineEnd, te);
         TESetStyle(faceMask, &base, false, te);
+        sStyleChanges++;
     }
 
-    /* Inline emphasis scan. */
+    /* Inline emphasis scan -- ApplyFace bumps sStyleChanges per run. */
     StyleInlineEmphasis(te, text, lineStart, lineLen);
 
     HUnlock((Handle)ch);
@@ -289,6 +335,7 @@ void MdRestyleAll(TEHandle te)
     if (len > 0) {
         TESetSelect(0, len, te);
         TESetStyle(faceMask, &base, false, te);
+        sStyleChanges++;
     }
 
     ch = TEGetText(te);
@@ -314,6 +361,7 @@ void MdRestyleAll(TEHandle te)
                     base.tsFace = bold;
                 TESetSelect(start, end, te);
                 TESetStyle(faceMask, &base, false, te);
+                sStyleChanges++;
             }
 
             StyleInlineEmphasis(te, text + start, start, end - start);

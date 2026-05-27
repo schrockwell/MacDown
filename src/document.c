@@ -178,6 +178,9 @@ static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
     *viewR = r;
 }
 
+/* Cached uniform line height (definition lives further down). */
+static short LineHeight(TEHandle te);
+
 /* ---- Active-doc tracking via scroll-action UPP context ----
 
    The scroll-bar action proc has a fixed signature (ctl, part) and no
@@ -196,9 +199,10 @@ static pascal void ScrollAction(ControlHandle ctl, short part)
     doc = DocFromWindow(w);
     if (doc == NULL)
         return;
-    lineH = (**doc->te).lineHeight;
-    if (lineH < 1)
-        lineH = 12;
+    /* (**te).lineHeight is -1 for a TEStyleNew (variable height marker),
+       so we'd previously fall back to a wrong literal. The true uniform
+       line height is cached in LineHeight(). */
+    lineH = LineHeight(doc->te);
     switch (part)
     {
     case inUpButton:
@@ -876,12 +880,17 @@ void DocClick(DocState *doc, EventRecord *ev)
 
 void DocAdjustScrollbar(DocState *doc)
 {
-    short totalH, viewH, max, curVal;
+    short nLines, totalH, viewH, max, curVal;
 
     if (!doc->te || !doc->vScroll)
         return;
 
-    totalH = TEGetHeight((**doc->te).nLines, 0, doc->te);
+    /* Total height was O(nLines) via TEGetHeight on every keystroke,
+       making typing in a long doc sluggish. Since every style we apply
+       is size 12 (see MdRestyleLine), line height is uniform and total
+       height is just nLines * lineHeight -- O(1). */
+    nLines = (**doc->te).nLines;
+    totalH = (short)((long)nLines * LineHeight(doc->te));
     viewH = (**doc->te).viewRect.bottom - (**doc->te).viewRect.top;
 
     max = totalH - viewH;
@@ -1086,6 +1095,17 @@ void DocMarkLineDirty(DocState *doc, short pos)
 
 /* ---- restyling on idle ---- */
 
+/* Cached line height (uniform across all docs because every style we
+   apply is size 12). Set on first use; never invalidated. */
+static short sCachedLineHeight = 0;
+
+static short LineHeight(TEHandle te)
+{
+    if (sCachedLineHeight == 0)
+        sCachedLineHeight = TEGetHeight(1, 0, te);
+    return sCachedLineHeight;
+}
+
 static short LineIndexForOffset(DocState *doc, short offset)
 {
     short n = (**doc->te).nLines;
@@ -1206,25 +1226,37 @@ void DocFlushRestyle(DocState *doc)
     DisposeRgn(savedClip);
     DisposeRgn(emptyRgn);
 
+    /* If the restyle pass touched no styles (typical case for typing
+       inside a plain paragraph), there's nothing to repaint -- TEKey
+       already drew the new glyph into the window. Skip the offscreen
+       allocation, TEUpdate, and CopyBits entirely. */
+    if (MdConsumeStyleChanges() == 0) {
+        SetPort(savedPort);
+        return;
+    }
+
     viewR = (**doc->te).viewRect;
 
-    if (startLineIdx == 0)
     {
-        drawRect.top = viewR.top;
-    }
-    else
-    {
-        topY = (**doc->te).destRect.top + TEGetHeight(startLineIdx, 0, doc->te);
+        short lh = LineHeight(doc->te);
+        short endLineIdx = LineIndexForOffset(doc, end);
+        short destTop = (**doc->te).destRect.top;
+        short bottomY;
+
+        topY = destTop + (short)((long)startLineIdx * lh);
+        bottomY = destTop + (short)((long)(endLineIdx + 1) * lh);
+
         drawRect.top = topY;
-        if (drawRect.top < viewR.top)
-            drawRect.top = viewR.top;
-        if (drawRect.top > viewR.bottom)
-            drawRect.top = viewR.bottom;
+        drawRect.bottom = bottomY;
+
+        if (drawRect.top < viewR.top) drawRect.top = viewR.top;
+        if (drawRect.top > viewR.bottom) drawRect.top = viewR.bottom;
+        if (drawRect.bottom > viewR.bottom) drawRect.bottom = viewR.bottom;
+        if (drawRect.bottom < drawRect.top) drawRect.bottom = drawRect.top;
     }
 
     drawRect.left = viewR.left;
     drawRect.right = viewR.right;
-    drawRect.bottom = viewR.bottom;
 
     if (drawRect.bottom > drawRect.top)
     {
@@ -2175,7 +2207,8 @@ void DocUndo(DocState *doc)
     doc->leKind = doc->undoLE;
 
     MdRestyleAll(doc->te);
-    TECalText(doc->te);
+    /* No TECalText: TESetText already recomputes line breaks, and
+       MdRestyleAll only changes faces (size 12 throughout). */
 
     SetClip(savedClip);
     DisposeRgn(savedClip);

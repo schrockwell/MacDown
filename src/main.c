@@ -455,7 +455,57 @@ static void HandleKey(EventRecord *ev)
     if (c == '\r') ResetInsertStyleToPlain(doc);
     doc->selAnchor = (**doc->te).selStart;
     DocMarkDirty(doc);
-    DocMarkLineDirty(doc, (**doc->te).selStart);
+
+    /* Skip the dirty mark (and the eventual restyle pass) when this
+       keystroke can't possibly change the line's styling. Conditions:
+       - typed char is a plain alphanumeric or high-bit byte (not a
+         markdown marker like *, _, #, -, >, [, ], `, digit-at-line-
+         start, space, period, etc.)
+       - cursor is past the leading marker zone (col > 7), so it can't
+         affect heading/list classification
+       - no * or _ within 2 chars of the cursor on either side, so the
+         emphasis flanking rules can't have shifted
+       TE auto-inherits the run style at the insertion point, so the
+       new glyph paints correctly without any restyle work. */
+    {
+        unsigned char uc = (unsigned char)c;
+        Boolean isPlainText =
+            (uc >= 'a' && uc <= 'z') ||
+            (uc >= 'A' && uc <= 'Z') ||
+            (uc >= '0' && uc <= '9') ||
+            uc >= 0x80;
+        Boolean needMark = true;
+
+        if (isPlainText) {
+            short pos = (**doc->te).selStart;
+            short lineStart, lineEnd;
+            MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
+            if (pos - lineStart > 7) {
+                CharsHandle ch = TEGetText(doc->te);
+                char *t;
+                short scanStart, scanEnd, j;
+                Boolean nearMarker = false;
+                HLock((Handle)ch);
+                t = *ch;
+                scanStart = pos - 2;
+                if (scanStart < lineStart) scanStart = lineStart;
+                scanEnd = pos + 2;
+                if (scanEnd > lineEnd) scanEnd = lineEnd;
+                for (j = scanStart; j < scanEnd; j++) {
+                    if (t[j] == '*' || t[j] == '_') {
+                        nearMarker = true;
+                        break;
+                    }
+                }
+                HUnlock((Handle)ch);
+                if (!nearMarker) needMark = false;
+            }
+        }
+
+        if (needMark)
+            DocMarkLineDirty(doc, (**doc->te).selStart);
+    }
+
     DocAdjustScrollbar(doc);
     /* End the typing burst at word boundaries so the next keystroke
        takes a fresh undo snapshot. Without this, fast continuous

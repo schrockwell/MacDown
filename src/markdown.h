@@ -42,6 +42,12 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd);
    Re-style Document. */
 void MdRestyleAll(TEHandle te);
 
+/* Returns and resets a counter of "real" style mutations performed by
+   MdRestyleLine / MdRestyleAll since the last call. Used by
+   DocFlushRestyle to skip its offscreen repaint when the restyle pass
+   was a no-op (e.g. typing inside a plain paragraph). */
+short MdConsumeStyleChanges(void);
+
 /* If the line containing `pos` is a list item with non-empty content,
    write the marker for the next line into *outMarker (Pascal-string-
    style: byte 0 = length, bytes 1+ = chars) and return true.
