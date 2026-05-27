@@ -221,17 +221,17 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
     kind = MdClassifyLine(text, lineLen);
 
+    /* Headings get distinct faces but all stay at size 12, so line
+       heights never change and callers never need TECalText. */
+    base.tsSize = 12;
     switch (kind) {
-        case kLine_H1: base.tsFace = bold; base.tsSize = 18; break;
-        case kLine_H2: base.tsFace = bold; base.tsSize = 16; break;
-        case kLine_H3: base.tsFace = bold; base.tsSize = 14; break;
-        case kLine_H4: base.tsFace = bold; base.tsSize = 13; break;
-        case kLine_H5: base.tsFace = bold; base.tsSize = 12; break;
-        case kLine_H6: base.tsFace = bold; base.tsSize = 12; break;
-        default:
-            base.tsFace = 0;
-            base.tsSize = 12;
-            break;
+        case kLine_H1:
+        case kLine_H2: base.tsFace = bold | underline; break;
+        case kLine_H3:
+        case kLine_H4:
+        case kLine_H5:
+        case kLine_H6: base.tsFace = bold;             break;
+        default:       base.tsFace = 0;                break;
     }
 
     if (kind != kLine_Plain) {
@@ -252,20 +252,73 @@ void MdRestyleAll(TEHandle te)
     short len = (**te).teLength;
     short start = 0;
     short end;
-    CharsHandle ch = TEGetText(te);
+    short savedStart, savedEnd;
+    CharsHandle ch;
     char *text;
+    TextStyle base;
+    short faceMask = doFace | doSize;
+    GrafPtr savedPort = NULL;
+    GrafPtr inPort = (**te).inPort;
+    RgnHandle savedClip = NULL;
+    RgnHandle emptyRgn = NULL;
+    MdLineKind kind;
 
+    /* Suppress drawing for the whole pass: TESetStyle paints into TE's
+       inPort on every call, which is what makes loading a long file
+       slow. Clip to an empty region so style runs update in memory but
+       nothing paints; the caller InvalRects for a single clean repaint. */
+    if (inPort) {
+        GetPort(&savedPort);
+        SetPort(inPort);
+        savedClip = NewRgn();
+        emptyRgn = NewRgn();
+        GetClip(savedClip);
+        SetClip(emptyRgn);
+    }
+
+    savedStart = (**te).selStart;
+    savedEnd   = (**te).selEnd;
+
+    /* Reset the entire document to plain size 12 in a single call,
+       instead of repeating that reset on every line. For a long mostly-
+       plain doc this collapses N TESetStyle reset calls into 1. */
+    base.tsFont = 0;
+    base.tsFace = 0;
+    base.tsSize = 12;
+    base.tsColor.red = base.tsColor.green = base.tsColor.blue = 0;
+    if (len > 0) {
+        TESetSelect(0, len, te);
+        TESetStyle(faceMask, &base, false, te);
+    }
+
+    ch = TEGetText(te);
     HLock((Handle)ch);
     text = *ch;
 
     while (start <= len) {
         end = start;
         while (end < len && text[end] != '\r') end++;
-        /* Unlock briefly because MdRestyleLine may relock via TEGetText. */
-        HUnlock((Handle)ch);
-        MdRestyleLine(te, start, end);
-        HLock((Handle)ch);
-        text = *ch;  /* handle may have moved */
+
+        if (end > start) {
+            kind = MdClassifyLine(text + start, end - start);
+
+            /* Plain lines already have the default style from the
+               document-wide reset above -- skip the per-line TESetStyle.
+               All heading levels stay at size 12 so line heights are
+               uniform and TECalText is never needed. */
+            if (kind >= kLine_H1 && kind <= kLine_H6) {
+                base.tsSize = 12;
+                if (kind == kLine_H1 || kind == kLine_H2)
+                    base.tsFace = bold | underline;
+                else
+                    base.tsFace = bold;
+                TESetSelect(start, end, te);
+                TESetStyle(faceMask, &base, false, te);
+            }
+
+            StyleInlineEmphasis(te, text + start, start, end - start);
+            text = *ch;  /* StyleInlineEmphasis may have moved the handle */
+        }
 
         if (end >= len) break;
         start = end + 1;  /* skip CR */
@@ -273,12 +326,17 @@ void MdRestyleAll(TEHandle te)
 
     HUnlock((Handle)ch);
 
-    /* TESetStyle changes glyph face/size but doesn't recompute the
-       per-line baselines and heights. Without this call, a doc that
-       loads with a big H1 on line 0 paints with the plain-12 line
-       spacing baked in at TESetText time — text overlaps or lifts
-       off the line. */
-    TECalText(te);
+    TESetSelect(savedStart, savedEnd, te);
+
+    if (savedClip) {
+        SetClip(savedClip);
+        DisposeRgn(savedClip);
+        DisposeRgn(emptyRgn);
+        SetPort(savedPort);
+    }
+
+    /* No TECalText needed: every style we apply is size 12, so line
+       heights computed at TESetText time stay correct. */
 }
 
 /* ---- list continuation marker ---- */

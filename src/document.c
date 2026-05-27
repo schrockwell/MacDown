@@ -450,17 +450,26 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     short i;
     DocState *doc;
     Boolean reusedEmpty;
+    CursHandle watch;
+
+    /* Reading + restyling a long file can take seconds on real hardware.
+       Show the watch cursor for the duration so the app doesn't look
+       hung. Restored via InitCursor on every exit path. */
+    watch = GetCursor(watchCursor);
+    if (watch) SetCursor(*watch);
 
     err = FileIOReadDoc(ownedWD, name, &data, &le, &folded);
     if (err == -1)
     {
         FileIOReleaseWD(ownedWD);
+        InitCursor();
         ShowError(kErrTooBig);
         return false;
     }
     if (err != noErr)
     {
         FileIOReleaseWD(ownedWD);
+        InitCursor();
         ShowError(kErrCantOpen);
         return false;
     }
@@ -470,6 +479,7 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     {
         DisposeHandle(data);
         FileIOReleaseWD(ownedWD);
+        InitCursor();
         ShowError(kErrTooBig);
         return false;
     }
@@ -483,6 +493,7 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
         {
             DisposeHandle(data);
             FileIOReleaseWD(ownedWD);
+            InitCursor();
             return false;
         }
     }
@@ -515,6 +526,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     ShowWindow(doc->window);
     SelectWindow(doc->window);
     InvalRect(&doc->window->portRect);
+
+    InitCursor();
 
     if (folded > 0)
         ShowError(kErrFolded);
@@ -1186,7 +1199,8 @@ void DocFlushRestyle(DocState *doc)
 
     HUnlock((Handle)ch);
 
-    TECalText(doc->te);
+    /* No TECalText: the restyler only changes face/size, and every
+       size it applies is 12, so line heights never shift. */
 
     SetClip(savedClip);
     DisposeRgn(savedClip);
