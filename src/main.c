@@ -44,10 +44,11 @@
 #define kEditSelAll   7
 
 #define kFormatToggleTask 1
-#define kFormatIndent     3
-#define kFormatOutdent    4
-#define kFormatDuplicate  5
-#define kFormatRestyleAll 7
+#define kFormatInsertLink 2
+#define kFormatIndent     4
+#define kFormatOutdent    5
+#define kFormatDuplicate  6
+#define kFormatRestyleAll 8
 
 #define kAboutItem      1
 #define kShortcutsItem  2
@@ -84,6 +85,7 @@ static void DoAbout(void);
 static Boolean HandleReturnKey(DocState *doc);
 static void DoToggleTask(DocState *doc);
 static void DoDeleteWordBack(DocState *doc);
+static void DoInsertLink(DocState *doc);
 static void DoFileOpen(void);
 static Boolean IsArrow(char c);
 static void HandleQuit(void);
@@ -523,6 +525,45 @@ static void DoToggleTask(DocState *doc)
     }
 }
 
+/* Insert a Markdown link at the cursor. No selection: "[]()" with the
+   caret between the brackets so the user types the link text first.
+   With a selection: wrap as "[selection]()" and put the caret between
+   the parens so the user types the URL. */
+static void DoInsertLink(DocState *doc)
+{
+    short selStart = (**doc->te).selStart;
+    short selEnd   = (**doc->te).selEnd;
+    short caret;
+
+    DocBeforeAction(doc);
+
+    if (selStart == selEnd) {
+        /* Empty selection: insert the full four chars. */
+        TEKey('[', doc->te);
+        TEKey(']', doc->te);
+        TEKey('(', doc->te);
+        TEKey(')', doc->te);
+        caret = selStart + 1;   /* between [ and ] */
+    } else {
+        /* Wrap the selection. Insert at the high end first so the
+           low-end insertion's index doesn't shift. */
+        TESetSelect(selEnd, selEnd, doc->te);
+        TEKey(']', doc->te);
+        TEKey('(', doc->te);
+        TEKey(')', doc->te);
+        TESetSelect(selStart, selStart, doc->te);
+        TEKey('[', doc->te);
+        /* Final layout: [ sel ] ( ) — caret between ( and ) */
+        caret = selEnd + 3;
+    }
+
+    TESetSelect(caret, caret, doc->te);
+    doc->selAnchor = caret;
+    DocMarkDirty(doc);
+    DocMarkLineDirty(doc, caret);
+    DocAdjustScrollbar(doc);
+}
+
 /* ---- Menu handling ---- */
 
 static void DrawAboutContent(WindowPtr w)
@@ -742,6 +783,7 @@ static void HandleMenu(long mResult)
             if (doc == NULL) break;
             switch (item) {
                 case kFormatToggleTask: DoToggleTask(doc); break;
+                case kFormatInsertLink: DoInsertLink(doc); break;
                 case kFormatIndent:     DocIndentLine(doc); break;
                 case kFormatOutdent:    DocOutdentLine(doc); break;
                 case kFormatDuplicate:  DocDuplicateLine(doc); break;

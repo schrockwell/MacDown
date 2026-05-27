@@ -66,6 +66,7 @@ resource 'MENU' (131, "Format") {
     "Format",
     {
         "Toggle Task",                noIcon, "L",    noMark, plain;
+        "Insert Link",                noIcon, "K",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Indent",                     noIcon, "]",    noMark, plain;
         "Outdent",                    noIcon, "[",    noMark, plain;
