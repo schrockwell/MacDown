@@ -358,6 +358,43 @@ static void HandleKey(EventRecord *ev)
         return;
     }
 
+    /* Smart-surround: typing one of *, _, (, or [ with text selected
+       wraps the selection in the matching pair instead of replacing
+       it. The original text stays selected so the user can keep
+       chaining wraps (e.g. ** then _ for bold-italic) without
+       re-selecting. */
+    {
+        char openCh = 0, closeCh = 0;
+        switch (c) {
+            case '*': openCh = '*'; closeCh = '*'; break;
+            case '_': openCh = '_'; closeCh = '_'; break;
+            case '(': openCh = '('; closeCh = ')'; break;
+            case '[': openCh = '['; closeCh = ']'; break;
+        }
+        if (openCh != 0) {
+            short selStart = (**doc->te).selStart;
+            short selEnd   = (**doc->te).selEnd;
+            if (selStart != selEnd) {
+                DocBeforeAction(doc);
+                /* Insert closer at the high end first -- its position
+                   isn't perturbed by the later insertion at selStart. */
+                TESetSelect(selEnd, selEnd, doc->te);
+                TEKey(closeCh, doc->te);
+                TESetSelect(selStart, selStart, doc->te);
+                TEKey(openCh, doc->te);
+                TESetSelect(selStart + 1, selEnd + 1, doc->te);
+                doc->selAnchor = selStart + 1;
+                DocMarkDirty(doc);
+                doc->dirtyLineStart = DocLineStartOffset(doc, selStart);
+                doc->dirtyLineEnd   = DocLineEndOffset(doc, selEnd + 1);
+                doc->lastDirtyTick  = TickCount() - 1000;
+                DocFlushRestyle(doc);
+                DocAdjustScrollbar(doc);
+                return;
+            }
+        }
+    }
+
     if (c == '\r') {
         DocBeforeAction(doc);
         if (HandleReturnKey(doc)) {
