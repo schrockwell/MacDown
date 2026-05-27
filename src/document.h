@@ -75,7 +75,6 @@ void DocUpdateTitle(DocState *doc);
 void DocMoveLineUp(DocState *doc);
 void DocMoveLineDown(DocState *doc);
 void DocDuplicateLine(DocState *doc);
-void DocInsertHRule(DocState *doc);
 
 /* Heading toggle. `level` is 1..6 to set that level, or 0 to strip
    any existing heading marker. If the line is already at the

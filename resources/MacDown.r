@@ -78,7 +78,6 @@ resource 'MENU' (131, "Format") {
         "No Heading",                 noIcon, "0",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Insert Link",                noIcon, "K",    noMark, plain;
-        "Insert Horizontal Rule",     noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Toggle Task",                noIcon, "L",    noMark, plain;
         "Duplicate Line",             noIcon, "D",    noMark, plain;

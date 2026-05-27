@@ -54,12 +54,11 @@
 #define kFormatH6         10
 #define kFormatNoHeading  11
 #define kFormatInsertLink 13
-#define kFormatInsertHR   14
-#define kFormatToggleTask 16
-#define kFormatDuplicate  17
-#define kFormatIndent     19
-#define kFormatOutdent    20
-#define kFormatRestyleAll 22
+#define kFormatToggleTask 15
+#define kFormatDuplicate  16
+#define kFormatIndent     18
+#define kFormatOutdent    19
+#define kFormatRestyleAll 21
 
 #define kAboutItem      1
 #define kShortcutsItem  2
@@ -816,7 +815,6 @@ static void HandleMenu(long mResult)
                 case kFormatH6:         DocToggleHeading(doc, 6); break;
                 case kFormatNoHeading:  DocToggleHeading(doc, 0); break;
                 case kFormatInsertLink: DoInsertLink(doc); break;
-                case kFormatInsertHR:   DocInsertHRule(doc); break;
                 case kFormatToggleTask: DoToggleTask(doc); break;
                 case kFormatDuplicate:  DocDuplicateLine(doc); break;
                 case kFormatIndent:     DocIndentLine(doc); break;

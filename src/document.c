@@ -1348,63 +1348,6 @@ void DocDuplicateLine(DocState *doc)
     DocAdjustScrollbar(doc);
 }
 
-/* ---- Insert horizontal rule ---- */
-
-void DocInsertHRule(DocState *doc)
-{
-    short pos, lineStart, lineEnd;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
-    short insertAt, newCaret;
-    short teLen = (**doc->te).teLength;
-    Boolean lineIsEmpty;
-
-    DocBeforeAction(doc);
-    pos = (**doc->te).selStart;
-    MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
-    lineIsEmpty = (lineEnd == lineStart);
-
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn  = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
-
-    if (lineIsEmpty) {
-        /* Replace the empty line with "---". */
-        TESetSelect(lineStart, lineStart, doc->te);
-        TEInsert("---", 3, doc->te);
-        newCaret = lineStart + 3;
-    } else {
-        /* Append \r---\r after current line, plus a blank line above
-           if current line isn't already blank-then-content. */
-        insertAt = lineEnd;
-        TESetSelect(insertAt, insertAt, doc->te);
-        if (insertAt >= teLen) {
-            TEInsert("\r---", 4, doc->te);
-            newCaret = insertAt + 4;
-        } else {
-            TEInsert("\r---\r", 5, doc->te);
-            newCaret = insertAt + 5;
-        }
-    }
-
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
-
-    TESetSelect(newCaret, newCaret, doc->te);
-    doc->selAnchor = newCaret;
-    DocMarkDirty(doc);
-    doc->dirtyLineStart = lineStart;
-    doc->dirtyLineEnd   = newCaret + 1;
-    doc->lastDirtyTick  = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
-}
-
 /* ---- Heading toggle ---- */
 
 void DocToggleHeading(DocState *doc, short level)
