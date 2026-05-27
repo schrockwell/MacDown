@@ -1,20 +1,21 @@
-#ifndef MDEDIT_MARKDOWN_H
-#define MDEDIT_MARKDOWN_H
+#ifndef MacDown_MARKDOWN_H
+#define MacDown_MARKDOWN_H
 
 #include <TextEdit.h>
 
-typedef enum {
-    kLine_Plain = 0,
-    kLine_H1,
-    kLine_H2,
-    kLine_H3,
-    kLine_H4,
-    kLine_H5,
-    kLine_H6,
-    kLine_UnorderedItem,
-    kLine_OrderedItem,
-    kLine_TaskUnchecked,
-    kLine_TaskChecked
+typedef enum
+{
+   kLine_Plain = 0,
+   kLine_H1,
+   kLine_H2,
+   kLine_H3,
+   kLine_H4,
+   kLine_H5,
+   kLine_H6,
+   kLine_UnorderedItem,
+   kLine_OrderedItem,
+   kLine_TaskUnchecked,
+   kLine_TaskChecked
 } MdLineKind;
 
 /* Classify a line given a pointer to its first byte and its length
@@ -54,5 +55,18 @@ Boolean MdNextListMarker(TEHandle te, short pos,
    return the absolute offset of the state character (' ' or 'x' /
    'X'). Returns -1 if no checkbox on this line. */
 short MdFindTaskBox(TEHandle te, short pos);
+
+/* Renumber the ordered list that contains line `lineStart` so each
+   item is one greater than the previous, starting from the existing
+   first-item number. No-op if `lineStart` is not on an ordered list
+   line. Returns the net change in document length.
+
+   If ioSelStart / ioSelEnd are non-NULL, they are updated as text
+   shifts so callers can restore the user's caret after the call.
+   Each modified line's digit run can either shift adjacent positions
+   by the digit-count delta or, for positions sitting inside a
+   replaced digit run, clamp to the new run's end. */
+long MdRenumberOrderedList(TEHandle te, short lineStart,
+                           short *ioSelStart, short *ioSelEnd);
 
 #endif

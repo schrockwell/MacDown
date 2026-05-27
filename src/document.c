@@ -17,23 +17,23 @@
 #include "markdown.h"
 #include "file_io.h"
 
-#define kWindowID        128
+#define kWindowID 128
 #define kSaveChangesALRT 129
-#define kErrStrListID    128
-#define kErrCantOpen     1
-#define kErrTooBig       2
-#define kErrFolded       3
-#define kErrCantSave     4
-#define kErrCantCreate   5
+#define kErrStrListID 128
+#define kErrCantOpen 1
+#define kErrTooBig 2
+#define kErrFolded 3
+#define kErrCantSave 4
+#define kErrCantCreate 5
 
-#define kUndoMenuID      130
-#define kUndoMenuItem    1
-#define kFileMenuID      129
-#define kFileMenuClose   3
-#define kFileMenuSave    4
-#define kFileMenuSaveAs  5
-#define kWindowsMenuID   132
-#define kWindowsMenuStaticItems 2   /* Next, separator */
+#define kUndoMenuID 130
+#define kUndoMenuItem 1
+#define kFileMenuID 129
+#define kFileMenuClose 3
+#define kFileMenuSave 4
+#define kFileMenuSaveAs 5
+#define kWindowsMenuID 132
+#define kWindowsMenuStaticItems 2 /* Next, separator */
 
 DocState *gDocs = NULL;
 
@@ -53,9 +53,11 @@ static void ShowError(short stringIndex)
 {
     Handle h = GetResource('STR#', kErrStrListID);
     Str255 s;
-    if (h == NULL) return;
+    if (h == NULL)
+        return;
     GetIndString(s, kErrStrListID, stringIndex);
-    if (s[0] == 0) return;
+    if (s[0] == 0)
+        return;
     ParamText(s, "\p", "\p", "\p");
     StopAlert(128, NULL);
 }
@@ -69,9 +71,12 @@ static void YieldOnce(void)
 static void SetUndoMenuEnabled(Boolean on)
 {
     MenuHandle m = GetMenuHandle(kUndoMenuID);
-    if (m == NULL) return;
-    if (on) EnableItem(m, kUndoMenuItem);
-    else    DisableItem(m, kUndoMenuItem);
+    if (m == NULL)
+        return;
+    if (on)
+        EnableItem(m, kUndoMenuItem);
+    else
+        DisableItem(m, kUndoMenuItem);
 }
 
 /* Close / Save / Save As require an active document; grey them out
@@ -80,13 +85,17 @@ static void SyncFileMenuEnables(void)
 {
     MenuHandle m = GetMenuHandle(kFileMenuID);
     Boolean haveDoc;
-    if (m == NULL) return;
+    if (m == NULL)
+        return;
     haveDoc = (DocActive() != NULL);
-    if (haveDoc) {
+    if (haveDoc)
+    {
         EnableItem(m, kFileMenuClose);
         EnableItem(m, kFileMenuSave);
         EnableItem(m, kFileMenuSaveAs);
-    } else {
+    }
+    else
+    {
         DisableItem(m, kFileMenuClose);
         DisableItem(m, kFileMenuSave);
         DisableItem(m, kFileMenuSaveAs);
@@ -96,7 +105,7 @@ static void SyncFileMenuEnables(void)
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
 {
     Rect r = w->portRect;
-    r.right  -= kMdScrollWidth;
+    r.right -= kMdScrollWidth;
     r.bottom -= kMdScrollWidth;
     InsetRect(&r, 4, 4);
     *destR = r;
@@ -115,23 +124,38 @@ static pascal void ScrollAction(ControlHandle ctl, short part)
     short lineH;
     short newVal;
     short oldVal;
-    if (part == 0) return;
+    if (part == 0)
+        return;
     w = (**ctl).contrlOwner;
     doc = DocFromWindow(w);
-    if (doc == NULL) return;
+    if (doc == NULL)
+        return;
     lineH = (**doc->te).lineHeight;
-    if (lineH < 1) lineH = 12;
-    switch (part) {
-        case inUpButton:    delta = -lineH; break;
-        case inDownButton:  delta =  lineH; break;
-        case inPageUp:      delta = -((**doc->te).viewRect.bottom - (**doc->te).viewRect.top); break;
-        case inPageDown:    delta =  ((**doc->te).viewRect.bottom - (**doc->te).viewRect.top); break;
-        default: return;
+    if (lineH < 1)
+        lineH = 12;
+    switch (part)
+    {
+    case inUpButton:
+        delta = -lineH;
+        break;
+    case inDownButton:
+        delta = lineH;
+        break;
+    case inPageUp:
+        delta = -((**doc->te).viewRect.bottom - (**doc->te).viewRect.top);
+        break;
+    case inPageDown:
+        delta = ((**doc->te).viewRect.bottom - (**doc->te).viewRect.top);
+        break;
+    default:
+        return;
     }
     oldVal = GetControlValue(ctl);
     newVal = oldVal + delta;
-    if (newVal < GetControlMinimum(ctl)) newVal = GetControlMinimum(ctl);
-    if (newVal > GetControlMaximum(ctl)) newVal = GetControlMaximum(ctl);
+    if (newVal < GetControlMinimum(ctl))
+        newVal = GetControlMinimum(ctl);
+    if (newVal > GetControlMaximum(ctl))
+        newVal = GetControlMaximum(ctl);
     SetControlValue(ctl, newVal);
     TEScroll(0, oldVal - newVal, doc->te);
 }
@@ -141,9 +165,12 @@ static pascal void ScrollAction(ControlHandle ctl, short part)
 DocState *DocFromWindow(WindowPtr w)
 {
     DocState *d;
-    if (w == NULL) return NULL;
-    for (d = gDocs; d != NULL; d = d->next) {
-        if (d->window == w) return d;
+    if (w == NULL)
+        return NULL;
+    for (d = gDocs; d != NULL; d = d->next)
+    {
+        if (d->window == w)
+            return d;
     }
     return NULL;
 }
@@ -170,11 +197,12 @@ DocState *DocNew(void)
     Rect destR, viewR;
     Rect ctlR;
 
-    doc = (DocState *) NewPtrClear(sizeof(DocState));
-    if (doc == NULL) return NULL;
-    doc->leKind        = kLE_CR;
+    doc = (DocState *)NewPtrClear(sizeof(DocState));
+    if (doc == NULL)
+        return NULL;
+    doc->leKind = kLE_CR;
     doc->dirtyLineStart = -1;
-    doc->dirtyLineEnd   = -1;
+    doc->dirtyLineEnd = -1;
 
     /* Stagger from the front window's global position (if any). We
        must compute the offset BEFORE GetNewWindow so we know where
@@ -183,41 +211,46 @@ DocState *DocNew(void)
         WindowPtr prev = FrontWindow();
         Point staggerTo;
         Boolean haveStagger = false;
-        if (prev != NULL) {
+        if (prev != NULL)
+        {
             GrafPtr savedPort;
             GetPort(&savedPort);
             SetPort(prev);
             staggerTo.h = 0;
             staggerTo.v = 0;
-            LocalToGlobal(&staggerTo);  /* now global TL of prev's content */
+            LocalToGlobal(&staggerTo); /* now global TL of prev's content */
             SetPort(savedPort);
             staggerTo.h += 20;
             staggerTo.v += 20;
             /* Wrap if we'd go off-screen */
-            if (staggerTo.h > qd.screenBits.bounds.right - 120)  staggerTo.h = 20;
-            if (staggerTo.v > qd.screenBits.bounds.bottom - 120) staggerTo.v = GetMBarHeight() + 20;
+            if (staggerTo.h > qd.screenBits.bounds.right - 120)
+                staggerTo.h = 20;
+            if (staggerTo.v > qd.screenBits.bounds.bottom - 120)
+                staggerTo.v = GetMBarHeight() + 20;
             haveStagger = true;
         }
 
         w = GetNewWindow(kWindowID, NULL, (WindowPtr)-1L);
-        if (w == NULL) {
+        if (w == NULL)
+        {
             DisposePtr((Ptr)doc);
             return NULL;
         }
-        if (haveStagger) MoveWindow(w, staggerTo.h, staggerTo.v, false);
+        if (haveStagger)
+            MoveWindow(w, staggerTo.h, staggerTo.v, false);
     }
 
     SetPort(w);
     doc->window = w;
-    SetWRefCon(w, (long) doc);
+    SetWRefCon(w, (long)doc);
 
     ComputeTERects(w, &destR, &viewR);
     doc->te = TEStyleNew(&destR, &viewR);
     TEAutoView(true, doc->te);
 
-    ctlR.top    = -1;
-    ctlR.left   = w->portRect.right - kMdScrollWidth;
-    ctlR.right  = w->portRect.right + 1;
+    ctlR.top = -1;
+    ctlR.left = w->portRect.right - kMdScrollWidth;
+    ctlR.right = w->portRect.right + 1;
     ctlR.bottom = w->portRect.bottom - 14;
     doc->vScroll = NewControl(w, &ctlR, "\p", true, 0, 0, 0,
                               scrollBarProc, 0);
@@ -257,8 +290,10 @@ DocState *DocNew(void)
 static DocState *FindEmptyUntitledDoc(void)
 {
     DocState *d;
-    for (d = gDocs; d != NULL; d = d->next) {
-        if (!d->hasFile && !d->dirty && (**d->te).teLength == 0) return d;
+    for (d = gDocs; d != NULL; d = d->next)
+    {
+        if (!d->hasFile && !d->dirty && (**d->te).teLength == 0)
+            return d;
     }
     return NULL;
 }
@@ -266,18 +301,28 @@ static DocState *FindEmptyUntitledDoc(void)
 Boolean DocClose(DocState *doc)
 {
     DocState **link;
-    if (doc == NULL) return true;
-    if (!DocPromptSaveIfDirty(doc)) return false;
+    if (doc == NULL)
+        return true;
+    if (!DocPromptSaveIfDirty(doc))
+        return false;
 
     /* Remove from list. */
-    for (link = &gDocs; *link != NULL; link = &(*link)->next) {
-        if (*link == doc) { *link = doc->next; break; }
+    for (link = &gDocs; *link != NULL; link = &(*link)->next)
+    {
+        if (*link == doc)
+        {
+            *link = doc->next;
+            break;
+        }
     }
 
     DocClearUndo(doc);
-    if (doc->hasFile) FileIOReleaseWD(doc->vRefNum);
-    if (doc->te)      TEDispose(doc->te);
-    if (doc->window)  DisposeWindow(doc->window);
+    if (doc->hasFile)
+        FileIOReleaseWD(doc->vRefNum);
+    if (doc->te)
+        TEDispose(doc->te);
+    if (doc->window)
+        DisposeWindow(doc->window);
     DisposePtr((Ptr)doc);
     RebuildWindowsMenu();
     SyncFileMenuEnables();
@@ -286,10 +331,12 @@ Boolean DocClose(DocState *doc)
 
 Boolean DocCloseAll(void)
 {
-    while (gDocs != NULL) {
+    while (gDocs != NULL)
+    {
         DocState *next = gDocs->next;
-        if (!DocClose(gDocs)) return false;
-        (void)next;  /* gDocs already advanced via DocClose's list-removal */
+        if (!DocClose(gDocs))
+            return false;
+        (void)next; /* gDocs already advanced via DocClose's list-removal */
     }
     return true;
 }
@@ -306,11 +353,13 @@ void DocUpdateTitle(DocState *doc)
     src = doc->hasFile ? (const unsigned char *)doc->fileName : fallback;
 
     title[0] = 0;
-    if (doc->dirty) {
+    if (doc->dirty)
+    {
         title[++title[0]] = 0xA5;
         title[++title[0]] = ' ';
     }
-    for (i = 1; i <= src[0]; i++) title[++title[0]] = src[i];
+    for (i = 1; i <= src[0]; i++)
+        title[++title[0]] = src[i];
 
     SetWTitle(doc->window, title);
     RebuildWindowsMenu();
@@ -337,11 +386,22 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     Boolean reusedEmpty;
 
     err = FileIOReadDoc(ownedWD, name, &data, &le, &folded);
-    if (err == -1)    { FileIOReleaseWD(ownedWD); ShowError(kErrTooBig);  return false; }
-    if (err != noErr) { FileIOReleaseWD(ownedWD); ShowError(kErrCantOpen); return false; }
+    if (err == -1)
+    {
+        FileIOReleaseWD(ownedWD);
+        ShowError(kErrTooBig);
+        return false;
+    }
+    if (err != noErr)
+    {
+        FileIOReleaseWD(ownedWD);
+        ShowError(kErrCantOpen);
+        return false;
+    }
 
     len = GetHandleSize(data);
-    if (len > kMdMaxFileBytes) {
+    if (len > kMdMaxFileBytes)
+    {
         DisposeHandle(data);
         FileIOReleaseWD(ownedWD);
         ShowError(kErrTooBig);
@@ -350,13 +410,20 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 
     doc = FindEmptyUntitledDoc();
     reusedEmpty = (doc != NULL);
-    if (!reusedEmpty) {
+    if (!reusedEmpty)
+    {
         doc = DocNew();
-        if (doc == NULL) { DisposeHandle(data); FileIOReleaseWD(ownedWD); return false; }
+        if (doc == NULL)
+        {
+            DisposeHandle(data);
+            FileIOReleaseWD(ownedWD);
+            return false;
+        }
     }
 
     /* If reused, release the old doc's wdRefNum before stomping it. */
-    if (reusedEmpty && doc->hasFile) FileIOReleaseWD(doc->vRefNum);
+    if (reusedEmpty && doc->hasFile)
+        FileIOReleaseWD(doc->vRefNum);
 
     ClearDocText(doc);
     HLock(data);
@@ -367,7 +434,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     doc->hasFile = true;
     doc->vRefNum = ownedWD;
     doc->fileName[0] = name[0];
-    for (i = 1; i <= name[0]; i++) doc->fileName[i] = name[i];
+    for (i = 1; i <= name[0]; i++)
+        doc->fileName[i] = name[i];
     doc->leKind = le;
     doc->dirty = false;
     DocClearUndo(doc);
@@ -382,7 +450,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     SelectWindow(doc->window);
     InvalRect(&doc->window->portRect);
 
-    if (folded > 0) ShowError(kErrFolded);
+    if (folded > 0)
+        ShowError(kErrFolded);
     return true;
 }
 
@@ -391,7 +460,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
 {
     short ownedWD;
-    if (FileIOOwnWD(anyWDRefNum, &ownedWD) != noErr) {
+    if (FileIOOwnWD(anyWDRefNum, &ownedWD) != noErr)
+    {
         ShowError(kErrCantOpen);
         return false;
     }
@@ -403,7 +473,8 @@ Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
 Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
 {
     short ownedWD;
-    if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr) {
+    if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr)
+    {
         ShowError(kErrCantOpen);
         return false;
     }
@@ -416,15 +487,22 @@ Boolean DocSave(DocState *doc)
     Handle copy;
     long len;
 
-    if (doc == NULL) return false;
-    if (!doc->hasFile) return DocSaveAs(doc);
+    if (doc == NULL)
+        return false;
+    if (!doc->hasFile)
+        return DocSaveAs(doc);
 
     len = (**doc->te).teLength;
 
     copy = NewHandle(len);
-    if (copy == NULL) { ShowError(kErrCantSave); return false; }
+    if (copy == NULL)
+    {
+        ShowError(kErrCantSave);
+        return false;
+    }
     HLock(copy);
-    if (len > 0) {
+    if (len > 0)
+    {
         CharsHandle ch = TEGetText(doc->te);
         HLock((Handle)ch);
         BlockMoveData(*ch, *copy, len);
@@ -436,7 +514,8 @@ Boolean DocSave(DocState *doc)
     HUnlock(copy);
     DisposeHandle(copy);
 
-    if (err != noErr) {
+    if (err != noErr)
+    {
         ShowError(kErrCantSave);
         return false;
     }
@@ -458,20 +537,27 @@ Boolean DocSaveAs(DocState *doc)
     short i;
     GrafPtr savedPort;
 
-    if (doc == NULL) return false;
+    if (doc == NULL)
+        return false;
 
     {
         char *p = (char *)&reply;
-        for (i = 0; i < (short)sizeof(SFReply); i++) p[i] = 0;
+        for (i = 0; i < (short)sizeof(SFReply); i++)
+            p[i] = 0;
     }
 
-    if (doc->hasFile) {
+    if (doc->hasFile)
+    {
         suggestion[0] = doc->fileName[0];
-        for (i = 1; i <= doc->fileName[0]; i++) suggestion[i] = doc->fileName[i];
-    } else {
+        for (i = 1; i <= doc->fileName[0]; i++)
+            suggestion[i] = doc->fileName[i];
+    }
+    else
+    {
         const unsigned char *def = (const unsigned char *)"\puntitled.md";
         suggestion[0] = def[0];
-        for (i = 1; i <= def[0]; i++) suggestion[i] = def[i];
+        for (i = 1; i <= def[0]; i++)
+            suggestion[i] = def[i];
     }
 
     GetPort(&savedPort);
@@ -485,15 +571,21 @@ Boolean DocSaveAs(DocState *doc)
     SetPort(savedPort);
     YieldOnce();
 
-    if (!reply.good) return false;
+    if (!reply.good)
+        return false;
 
     /* Own a wdRefNum for the chosen folder so the slot can't be
        recycled out from under us between this save and the next. */
     {
         short ownedWD;
         OSErr err = FileIOOwnWD(reply.vRefNum, &ownedWD);
-        if (err != noErr) { ShowError(kErrCantSave); return false; }
-        if (doc->hasFile) FileIOReleaseWD(doc->vRefNum);
+        if (err != noErr)
+        {
+            ShowError(kErrCantSave);
+            return false;
+        }
+        if (doc->hasFile)
+            FileIOReleaseWD(doc->vRefNum);
         doc->vRefNum = ownedWD;
     }
 
@@ -508,16 +600,22 @@ Boolean DocSaveAs(DocState *doc)
 Boolean DocPromptSaveIfDirty(DocState *doc)
 {
     short item;
-    if (doc == NULL) return true;
-    if (!doc->dirty) return true;
+    if (doc == NULL)
+        return true;
+    if (!doc->dirty)
+        return true;
     InitCursor();
-    SelectWindow(doc->window);  /* so the alert appears in front of THIS doc */
+    SelectWindow(doc->window); /* so the alert appears in front of THIS doc */
     item = StopAlert(kSaveChangesALRT, NULL);
-    switch (item) {
-        case 1: return DocSave(doc);
-        case 2: return true;
-        case 3:
-        default: return false;
+    switch (item)
+    {
+    case 1:
+        return DocSave(doc);
+    case 2:
+        return true;
+    case 3:
+    default:
+        return false;
     }
 }
 
@@ -528,7 +626,8 @@ void DocResize(DocState *doc)
     Rect destR, viewR;
     WindowPtr w = doc->window;
     GrafPtr savedPort;
-    if (!w) return;
+    if (!w)
+        return;
 
     GetPort(&savedPort);
     SetPort(w);
@@ -585,13 +684,16 @@ void DocActivate(DocState *doc, Boolean active)
     GetPort(&savedPort);
     SetPort(doc->window);
 
-    if (active) {
+    if (active)
+    {
         TEActivate(doc->te);
         ShowControl(doc->vScroll);
         /* The Undo menu is global but the undo stack is per-doc; sync
            the menu to the now-frontmost doc. */
         SetUndoMenuEnabled(doc->canUndo);
-    } else {
+    }
+    else
+    {
         TEDeactivate(doc->te);
         HideControl(doc->vScroll);
     }
@@ -616,12 +718,16 @@ void DocClick(DocState *doc, EventRecord *ev)
     GlobalToLocal(&local);
 
     part = FindControl(local, w, &ctl);
-    if (part != 0 && ctl == doc->vScroll) {
-        if (part == inThumb) {
+    if (part != 0 && ctl == doc->vScroll)
+    {
+        if (part == inThumb)
+        {
             short oldVal = GetControlValue(ctl);
             TrackControl(ctl, local, NULL);
             TEScroll(0, oldVal - GetControlValue(ctl), doc->te);
-        } else {
+        }
+        else
+        {
             TrackControl(ctl, local, NewControlActionProc(ScrollAction));
         }
         return;
@@ -629,10 +735,12 @@ void DocClick(DocState *doc, EventRecord *ev)
 
     {
         Rect viewR = (**doc->te).viewRect;
-        if (PtInRect(local, &viewR)) {
+        if (PtInRect(local, &viewR))
+        {
             Boolean extend = (ev->modifiers & shiftKey) != 0;
             TEClick(local, extend, doc->te);
-            if (!extend) doc->selAnchor = (**doc->te).selStart;
+            if (!extend)
+                doc->selAnchor = (**doc->te).selStart;
             /* Repositioning the caret ends the current typing burst —
                otherwise typing after a click extends the previous burst
                and Cmd-Z reaches back too far. */
@@ -645,18 +753,22 @@ void DocAdjustScrollbar(DocState *doc)
 {
     short totalH, viewH, max, curVal;
 
-    if (!doc->te || !doc->vScroll) return;
+    if (!doc->te || !doc->vScroll)
+        return;
 
     totalH = TEGetHeight((**doc->te).nLines, 0, doc->te);
-    viewH  = (**doc->te).viewRect.bottom - (**doc->te).viewRect.top;
+    viewH = (**doc->te).viewRect.bottom - (**doc->te).viewRect.top;
 
     max = totalH - viewH;
-    if (max < 0) max = 0;
+    if (max < 0)
+        max = 0;
     SetControlMaximum(doc->vScroll, max);
 
     curVal = (**doc->te).viewRect.top - (**doc->te).destRect.top;
-    if (curVal < 0) curVal = 0;
-    if (curVal > max) curVal = max;
+    if (curVal < 0)
+        curVal = 0;
+    if (curVal > max)
+        curVal = max;
     SetControlValue(doc->vScroll, curVal);
 
     HiliteControl(doc->vScroll, (max == 0) ? 255 : 0);
@@ -675,21 +787,25 @@ void RebuildWindowsMenu(void)
     short total;
     WindowPtr front;
 
-    if (m == NULL) return;
+    if (m == NULL)
+        return;
 
     /* Strip dynamic items. */
     total = CountMItems(m);
-    while (total > kWindowsMenuStaticItems) {
+    while (total > kWindowsMenuStaticItems)
+    {
         DeleteMenuItem(m, total);
         total--;
     }
 
     /* No docs: leave the menu with just the static items. */
-    if (gDocs == NULL) return;
+    if (gDocs == NULL)
+        return;
 
     front = FrontWindow();
     itemIdx = kWindowsMenuStaticItems;
-    for (d = gDocs; d != NULL; d = d->next) {
+    for (d = gDocs; d != NULL; d = d->next)
+    {
         Str255 itemText;
         Str255 title;
         short j;
@@ -703,7 +819,8 @@ void RebuildWindowsMenu(void)
         itemIdx++;
 
         itemText[0] = title[0];
-        for (j = 1; j <= title[0]; j++) itemText[j] = title[j];
+        for (j = 1; j <= title[0]; j++)
+            itemText[j] = title[j];
         SetMenuItemText(m, itemIdx, itemText);
 
         SetItemMark(m, itemIdx, (d->window == front) ? (short)checkMark : (short)noMark);
@@ -714,8 +831,13 @@ void DocSelectFromMenu(short menuItem)
 {
     DocState *d = gDocs;
     short idx = 1;
-    while (d != NULL && idx < menuItem) { d = d->next; idx++; }
-    if (d == NULL) return;
+    while (d != NULL && idx < menuItem)
+    {
+        d = d->next;
+        idx++;
+    }
+    if (d == NULL)
+        return;
     SelectWindow(d->window);
 }
 
@@ -725,20 +847,24 @@ void DocCycleWindow(void)
     WindowPtr w;
     WindowPtr target = NULL;
 
-    if (gDocs == NULL || gDocs->next == NULL) return;  /* 0 or 1 docs */
+    if (gDocs == NULL || gDocs->next == NULL)
+        return; /* 0 or 1 docs */
 
     front = FrontWindow();
-    if (DocFromWindow(front) == NULL) return;
+    if (DocFromWindow(front) == NULL)
+        return;
 
-    /* Send front to the back; the next MdEdit window comes forward. */
+    /* Send front to the back; the next MacDown window comes forward. */
     SendBehind(front, NULL);
     w = FrontWindow();
-    while (w != NULL && DocFromWindow(w) == NULL) {
+    while (w != NULL && DocFromWindow(w) == NULL)
+    {
         w = (WindowPtr)((WindowPeek)w)->nextWindow;
     }
     target = w;
 
-    if (target != NULL && target != front) SelectWindow(target);
+    if (target != NULL && target != front)
+        SelectWindow(target);
     RebuildWindowsMenu();
 }
 
@@ -746,7 +872,8 @@ void DocCycleWindow(void)
 
 void DocMarkDirty(DocState *doc)
 {
-    if (!doc->dirty) {
+    if (!doc->dirty)
+    {
         doc->dirty = true;
         DocUpdateTitle(doc);
     }
@@ -765,7 +892,8 @@ void DocMarkLineDirty(DocState *doc, short pos)
     MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
 
     col = pos - lineStart;
-    if (col > 7) {
+    if (col > 7)
+    {
         short ilen = lineEnd - lineStart;
         CharsHandle hCh = TEGetText(doc->te);
         char *t;
@@ -773,11 +901,17 @@ void DocMarkLineDirty(DocState *doc, short pos)
         short j;
         HLock((Handle)hCh);
         t = *hCh + lineStart;
-        for (j = 0; j < ilen; j++) {
-            if (t[j] == '*' || t[j] == '_') { hasEmph = true; break; }
+        for (j = 0; j < ilen; j++)
+        {
+            if (t[j] == '*' || t[j] == '_')
+            {
+                hasEmph = true;
+                break;
+            }
         }
         HUnlock((Handle)hCh);
-        if (!hasEmph) return;
+        if (!hasEmph)
+            return;
     }
 
     lineLen = lineEnd - lineStart;
@@ -787,28 +921,41 @@ void DocMarkLineDirty(DocState *doc, short pos)
 
     kind = MdClassifyLine(text, lineLen);
 
-    if (kind == kLine_Plain) {
-        for (i = 0; i < lineLen; i++) {
-            if (text[i] == '*' || text[i] == '_') { hasEmphasis = true; break; }
+    if (kind == kLine_Plain)
+    {
+        for (i = 0; i < lineLen; i++)
+        {
+            if (text[i] == '*' || text[i] == '_')
+            {
+                hasEmphasis = true;
+                break;
+            }
         }
-        if (!hasEmphasis) {
+        if (!hasEmphasis)
+        {
             TextStyle current;
             short lh, fa;
             HUnlock((Handle)ch);
             TEGetStyle(lineStart, &current, &lh, &fa, doc->te);
-            if (current.tsFace == 0 && current.tsSize == 12) return;
+            if (current.tsFace == 0 && current.tsSize == 12)
+                return;
             HLock((Handle)ch);
         }
     }
 
     HUnlock((Handle)ch);
 
-    if (doc->dirtyLineStart < 0) {
+    if (doc->dirtyLineStart < 0)
+    {
         doc->dirtyLineStart = lineStart;
-        doc->dirtyLineEnd   = lineEnd;
-    } else {
-        if (lineStart < doc->dirtyLineStart) doc->dirtyLineStart = lineStart;
-        if (lineEnd   > doc->dirtyLineEnd)   doc->dirtyLineEnd   = lineEnd;
+        doc->dirtyLineEnd = lineEnd;
+    }
+    else
+    {
+        if (lineStart < doc->dirtyLineStart)
+            doc->dirtyLineStart = lineStart;
+        if (lineEnd > doc->dirtyLineEnd)
+            doc->dirtyLineEnd = lineEnd;
     }
 }
 
@@ -818,9 +965,12 @@ static short LineIndexForOffset(DocState *doc, short offset)
 {
     short n = (**doc->te).nLines;
     short i;
-    if (n <= 0) return 0;
-    for (i = 0; i < n; i++) {
-        if ((**doc->te).lineStarts[i + 1] > offset) return i;
+    if (n <= 0)
+        return 0;
+    for (i = 0; i < n; i++)
+    {
+        if ((**doc->te).lineStarts[i + 1] > offset)
+            return i;
     }
     return n - 1;
 }
@@ -838,16 +988,53 @@ void DocFlushRestyle(DocState *doc)
     Rect viewR;
     short topY;
 
-    if (doc->dirtyLineStart < 0) return;
+    if (doc->dirtyLineStart < 0)
+        return;
 
     {
         short teLen = (**doc->te).teLength;
-        if (doc->dirtyLineStart > teLen) doc->dirtyLineStart = teLen;
-        if (doc->dirtyLineEnd   > teLen) doc->dirtyLineEnd   = teLen;
+        if (doc->dirtyLineStart > teLen)
+            doc->dirtyLineStart = teLen;
+        if (doc->dirtyLineEnd > teLen)
+            doc->dirtyLineEnd = teLen;
+    }
+
+    /* Renumber any ordered list that overlaps the dirty range. Lists
+       whose numbers already match the expected sequence are a no-op;
+       the call only writes when a delete or insert disturbed them.
+       This is the "delete" half of smart-renumber -- the insert half
+       is triggered explicitly from HandleReturnKey. Done before the
+       restyle pass so the restyled lines see the correct text.
+
+       Always restore the TE selection after the call, even when the
+       totals cancel to zero: individual TEDelete/TEInsert pairs leave
+       the caret parked on the last-edited digit run otherwise. */
+    {
+        short selStart = (**doc->te).selStart;
+        short selEnd   = (**doc->te).selEnd;
+        short origStart = selStart, origEnd = selEnd;
+        short anchor    = doc->selAnchor;
+        Boolean anchorEqStart = (anchor == origStart);
+        Boolean anchorEqEnd   = (anchor == origEnd);
+        long  delta;
+
+        delta = MdRenumberOrderedList(doc->te, doc->dirtyLineStart,
+                                      &selStart, &selEnd);
+        if (delta != 0) {
+            short teLen = (**doc->te).teLength;
+            doc->dirtyLineEnd += (short)delta;
+            if (doc->dirtyLineEnd > teLen)   doc->dirtyLineEnd = teLen;
+            if (doc->dirtyLineEnd < doc->dirtyLineStart)
+                doc->dirtyLineEnd = doc->dirtyLineStart;
+        }
+        TESetSelect(selStart, selEnd, doc->te);
+        if      (anchorEqStart) doc->selAnchor = selStart;
+        else if (anchorEqEnd)   doc->selAnchor = selEnd;
+        else                    doc->selAnchor = selStart;
     }
 
     start = doc->dirtyLineStart;
-    end   = doc->dirtyLineEnd;
+    end = doc->dirtyLineEnd;
     doc->dirtyLineStart = doc->dirtyLineEnd = -1;
 
     startLineIdx = LineIndexForOffset(doc, start);
@@ -856,7 +1043,7 @@ void DocFlushRestyle(DocState *doc)
     SetPort(doc->window);
 
     savedClip = NewRgn();
-    emptyRgn  = NewRgn();
+    emptyRgn = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
@@ -865,19 +1052,23 @@ void DocFlushRestyle(DocState *doc)
     text = *ch;
 
     lineStart = start;
-    while (lineStart > 0 && text[lineStart - 1] != '\r') lineStart--;
+    while (lineStart > 0 && text[lineStart - 1] != '\r')
+        lineStart--;
 
-    while (lineStart <= end) {
+    while (lineStart <= end)
+    {
         short teLen = (**doc->te).teLength;
         lineEnd = lineStart;
-        while (lineEnd < teLen && text[lineEnd] != '\r') lineEnd++;
+        while (lineEnd < teLen && text[lineEnd] != '\r')
+            lineEnd++;
 
         HUnlock((Handle)ch);
         MdRestyleLine(doc->te, lineStart, lineEnd);
         HLock((Handle)ch);
         text = *ch;
 
-        if (lineEnd >= teLen) break;
+        if (lineEnd >= teLen)
+            break;
         lineStart = lineEnd + 1;
     }
 
@@ -891,20 +1082,26 @@ void DocFlushRestyle(DocState *doc)
 
     viewR = (**doc->te).viewRect;
 
-    if (startLineIdx == 0) {
+    if (startLineIdx == 0)
+    {
         drawRect.top = viewR.top;
-    } else {
+    }
+    else
+    {
         topY = (**doc->te).destRect.top + TEGetHeight(startLineIdx, 0, doc->te);
         drawRect.top = topY;
-        if (drawRect.top < viewR.top)    drawRect.top = viewR.top;
-        if (drawRect.top > viewR.bottom) drawRect.top = viewR.bottom;
+        if (drawRect.top < viewR.top)
+            drawRect.top = viewR.top;
+        if (drawRect.top > viewR.bottom)
+            drawRect.top = viewR.bottom;
     }
 
-    drawRect.left   = viewR.left;
-    drawRect.right  = viewR.right;
+    drawRect.left = viewR.left;
+    drawRect.right = viewR.right;
     drawRect.bottom = viewR.bottom;
 
-    if (drawRect.bottom > drawRect.top) {
+    if (drawRect.bottom > drawRect.top)
+    {
         EraseRect(&drawRect);
         TEUpdate(&drawRect, doc->te);
     }
@@ -932,41 +1129,51 @@ static void MoveLine(DocState *doc, Boolean down)
 
     MdFindLineBounds(doc->te, pos, &curStart, &curEnd);
 
-    if (down) {
-        if (curEnd >= teLen) return;
+    if (down)
+    {
+        if (curEnd >= teLen)
+            return;
         MdFindLineBounds(doc->te, curEnd + 1, &otherStart, &otherEnd);
-    } else {
-        if (curStart == 0) return;
+    }
+    else
+    {
+        if (curStart == 0)
+            return;
         MdFindLineBounds(doc->te, curStart - 1, &otherStart, &otherEnd);
     }
 
-    curLen          = curEnd - curStart;
-    otherLen        = otherEnd - otherStart;
+    curLen = curEnd - curStart;
+    otherLen = otherEnd - otherStart;
     selOffsetInLine = pos - curStart;
-    if (selOffsetInLine > curLen) selOffsetInLine = curLen;
+    if (selOffsetInLine > curLen)
+        selOffsetInLine = curLen;
 
     buf = NewHandle((long)curLen + 1 + (long)otherLen);
-    if (buf == NULL) return;
+    if (buf == NULL)
+        return;
     HLock(buf);
 
     ch = TEGetText(doc->te);
     HLock((Handle)ch);
     text = *ch;
 
-    if (down) {
+    if (down)
+    {
         BlockMoveData(text + otherStart, *buf, otherLen);
         (*buf)[otherLen] = '\r';
         BlockMoveData(text + curStart, *buf + otherLen + 1, curLen);
         rangeStart = curStart;
-        rangeEnd   = otherEnd;
-        newSel     = curStart + otherLen + 1 + selOffsetInLine;
-    } else {
+        rangeEnd = otherEnd;
+        newSel = curStart + otherLen + 1 + selOffsetInLine;
+    }
+    else
+    {
         BlockMoveData(text + curStart, *buf, curLen);
         (*buf)[curLen] = '\r';
         BlockMoveData(text + otherStart, *buf + curLen + 1, otherLen);
         rangeStart = otherStart;
-        rangeEnd   = curEnd;
-        newSel     = otherStart + selOffsetInLine;
+        rangeEnd = curEnd;
+        newSel = otherStart + selOffsetInLine;
     }
 
     HUnlock((Handle)ch);
@@ -974,7 +1181,7 @@ static void MoveLine(DocState *doc, Boolean down)
     GetPort(&savedPort);
     SetPort(doc->window);
     savedClip = NewRgn();
-    emptyRgn  = NewRgn();
+    emptyRgn = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
@@ -992,14 +1199,14 @@ static void MoveLine(DocState *doc, Boolean down)
     DisposeHandle(buf);
 
     doc->dirtyLineStart = rangeStart;
-    doc->dirtyLineEnd   = rangeStart + curLen + 1 + otherLen;
-    doc->lastDirtyTick  = TickCount() - 1000;
+    doc->dirtyLineEnd = rangeStart + curLen + 1 + otherLen;
+    doc->lastDirtyTick = TickCount() - 1000;
     DocFlushRestyle(doc);
     DocMarkDirty(doc);
     DocAdjustScrollbar(doc);
 }
 
-void DocMoveLineUp(DocState *doc)   { MoveLine(doc, false); }
+void DocMoveLineUp(DocState *doc) { MoveLine(doc, false); }
 void DocMoveLineDown(DocState *doc) { MoveLine(doc, true); }
 
 /* Insert a copy of the current line below it. Cursor moves to the
@@ -1019,10 +1226,12 @@ void DocDuplicateLine(DocState *doc)
 
     /* Buffer holds "\r" followed by the line's text. */
     buf = NewHandle((long)lineLen + 1);
-    if (buf == NULL) return;
+    if (buf == NULL)
+        return;
     HLock(buf);
     (*buf)[0] = '\r';
-    if (lineLen > 0) {
+    if (lineLen > 0)
+    {
         CharsHandle ch = TEGetText(doc->te);
         HLock((Handle)ch);
         BlockMoveData(*ch + lineStart, *buf + 1, lineLen);
@@ -1032,7 +1241,7 @@ void DocDuplicateLine(DocState *doc)
     GetPort(&savedPort);
     SetPort(doc->window);
     savedClip = NewRgn();
-    emptyRgn  = NewRgn();
+    emptyRgn = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
@@ -1053,7 +1262,311 @@ void DocDuplicateLine(DocState *doc)
 
     DocMarkDirty(doc);
     doc->dirtyLineStart = lineStart;
-    doc->dirtyLineEnd   = lineEnd + 1 + lineLen;
+    doc->dirtyLineEnd = lineEnd + 1 + lineLen;
+    doc->lastDirtyTick = TickCount() - 1000;
+    DocFlushRestyle(doc);
+    DocAdjustScrollbar(doc);
+}
+
+/* ---- Insert horizontal rule ---- */
+
+void DocInsertHRule(DocState *doc)
+{
+    short pos, lineStart, lineEnd;
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+    short insertAt, newCaret;
+    short teLen = (**doc->te).teLength;
+    Boolean lineIsEmpty;
+
+    DocBeforeAction(doc);
+    pos = (**doc->te).selStart;
+    MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
+    lineIsEmpty = (lineEnd == lineStart);
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn  = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    if (lineIsEmpty) {
+        /* Replace the empty line with "---". */
+        TESetSelect(lineStart, lineStart, doc->te);
+        TEInsert("---", 3, doc->te);
+        newCaret = lineStart + 3;
+    } else {
+        /* Append \r---\r after current line, plus a blank line above
+           if current line isn't already blank-then-content. */
+        insertAt = lineEnd;
+        TESetSelect(insertAt, insertAt, doc->te);
+        if (insertAt >= teLen) {
+            TEInsert("\r---", 4, doc->te);
+            newCaret = insertAt + 4;
+        } else {
+            TEInsert("\r---\r", 5, doc->te);
+            newCaret = insertAt + 5;
+        }
+    }
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+    SetPort(savedPort);
+
+    TESetSelect(newCaret, newCaret, doc->te);
+    doc->selAnchor = newCaret;
+    DocMarkDirty(doc);
+    doc->dirtyLineStart = lineStart;
+    doc->dirtyLineEnd   = newCaret + 1;
+    doc->lastDirtyTick  = TickCount() - 1000;
+    DocFlushRestyle(doc);
+    DocAdjustScrollbar(doc);
+}
+
+/* ---- Heading toggle ---- */
+
+void DocToggleHeading(DocState *doc, short level)
+{
+    short selStart, selEnd, lineStart, lineEnd;
+    short markerStart, markerEnd, currentLevel;
+    short oldPrefixLen, newPrefixLen;
+    short targetLevel;
+    short i;
+    char newPrefix[8];
+    CharsHandle ch;
+    char *text;
+    short newSelStart, newSelEnd;
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+
+    if (level < 0 || level > 6) return;
+    DocBeforeAction(doc);
+
+    selStart = (**doc->te).selStart;
+    selEnd   = (**doc->te).selEnd;
+    MdFindLineBounds(doc->te, selStart, &lineStart, &lineEnd);
+
+    ch = TEGetText(doc->te);
+    HLock((Handle)ch);
+    text = *ch;
+
+    /* Detect current heading level on this line. */
+    i = lineStart;
+    while (i < lineEnd && i < lineStart + 3 && text[i] == ' ') i++;
+    markerStart = i;
+    currentLevel = 0;
+    {
+        short hashes = 0;
+        while (i < lineEnd && text[i] == '#' && hashes < 7) { hashes++; i++; }
+        if (hashes >= 1 && hashes <= 6 && i < lineEnd && text[i] == ' ') {
+            currentLevel = hashes;
+            markerEnd = markerStart + hashes + 1;   /* include the space */
+        } else {
+            markerEnd = markerStart;
+        }
+    }
+    HUnlock((Handle)ch);
+
+    /* Toggle: same level requested as already on the line -> strip. */
+    targetLevel = (level == currentLevel) ? 0 : level;
+
+    newPrefixLen = 0;
+    if (targetLevel > 0) {
+        short k;
+        for (k = 0; k < targetLevel; k++) newPrefix[newPrefixLen++] = '#';
+        newPrefix[newPrefixLen++] = ' ';
+    }
+    oldPrefixLen = markerEnd - markerStart;
+
+    /* If the marker is unchanged, nothing to do. */
+    if (newPrefixLen == oldPrefixLen) {
+        Boolean same = true;
+        if (newPrefixLen > 0) {
+            short k;
+            HLock((Handle)ch);
+            for (k = 0; k < newPrefixLen; k++) {
+                if ((*ch)[markerStart + k] != newPrefix[k]) { same = false; break; }
+            }
+            HUnlock((Handle)ch);
+        }
+        if (same) return;
+    }
+
+    /* Adjust the selection to follow the replacement. */
+    {
+        short delta = newPrefixLen - oldPrefixLen;
+        newSelStart = selStart;
+        newSelEnd   = selEnd;
+        if (selStart >= markerEnd) newSelStart = selStart + delta;
+        else if (selStart > markerStart) newSelStart = markerStart + newPrefixLen;
+        if (selEnd >= markerEnd) newSelEnd = selEnd + delta;
+        else if (selEnd > markerStart) newSelEnd = markerStart + newPrefixLen;
+        if (newSelStart < markerStart) newSelStart = markerStart;
+        if (newSelEnd < newSelStart)   newSelEnd   = newSelStart;
+    }
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn  = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    TESetSelect(markerStart, markerEnd, doc->te);
+    if (oldPrefixLen > 0) TEDelete(doc->te);
+    if (newPrefixLen > 0) TEInsert(newPrefix, newPrefixLen, doc->te);
+
+    TESetSelect(newSelStart, newSelEnd, doc->te);
+    doc->selAnchor = newSelStart;
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+    SetPort(savedPort);
+
+    DocMarkDirty(doc);
+    doc->dirtyLineStart = lineStart;
+    doc->dirtyLineEnd   = lineEnd + (newPrefixLen - oldPrefixLen);
+    doc->lastDirtyTick  = TickCount() - 1000;
+    DocFlushRestyle(doc);
+    DocAdjustScrollbar(doc);
+}
+
+/* ---- Symmetric pair wrap / toggle (Cmd-B, Cmd-I, Cmd-`) ---- */
+
+/* True if the n bytes starting at `start` are all `ch`. */
+static Boolean BytesAreAll(TEHandle te, short start, short count, char ch)
+{
+    CharsHandle h;
+    short i;
+    Boolean ok = true;
+    if (count <= 0) return false;
+    if (start < 0 || start + count > (**te).teLength) return false;
+    h = TEGetText(te);
+    HLock((Handle)h);
+    for (i = 0; i < count; i++) {
+        if ((*h)[start + i] != ch) { ok = false; break; }
+    }
+    HUnlock((Handle)h);
+    return ok;
+}
+
+/* True if position p is exactly `ch` and neither its immediate
+   neighbor is `ch` -- used to distinguish a lone `*` (italic) from a
+   `**` run (bold) when n==1. */
+static Boolean ByteIs(TEHandle te, short p, char ch)
+{
+    CharsHandle h;
+    Boolean ok;
+    if (p < 0 || p >= (**te).teLength) return false;
+    h = TEGetText(te);
+    HLock((Handle)h);
+    ok = ((*h)[p] == ch);
+    HUnlock((Handle)h);
+    return ok;
+}
+
+void DocWrapPair(DocState *doc, char ch, short n)
+{
+    short selStart = (**doc->te).selStart;
+    short selEnd   = (**doc->te).selEnd;
+    short i;
+    char  pair[8];
+    Boolean wrappedInside  = false;   /* selection includes markers */
+    Boolean wrappedOutside = false;   /* markers sit just outside selection */
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+    short cursor;
+    short lineStart, lineEnd;
+
+    if (n < 1 || n > 4) return;
+    for (i = 0; i < n; i++) pair[i] = ch;
+
+    /* Toggle detection -- only when a non-empty selection exists. */
+    if (selStart != selEnd) {
+        /* Inside: [**bold**] selection, strip the inner markers. */
+        if (selEnd - selStart >= 2 * n
+            && BytesAreAll(doc->te, selStart,         n, ch)
+            && BytesAreAll(doc->te, selEnd - n,       n, ch))
+        {
+            wrappedInside = true;
+            /* For n=1 italic, make sure we didn't match a `**` run. */
+            if (n == 1) {
+                if (ByteIs(doc->te, selStart + 1, ch)) wrappedInside = false;
+                if (ByteIs(doc->te, selEnd   - 2, ch)) wrappedInside = false;
+            }
+        }
+        /* Outside: **|bold|** -- selection holds the content, markers
+           sit right next to it. Strip them and keep content selected. */
+        if (!wrappedInside
+            && BytesAreAll(doc->te, selStart - n,     n, ch)
+            && BytesAreAll(doc->te, selEnd,           n, ch))
+        {
+            wrappedOutside = true;
+            if (n == 1) {
+                if (ByteIs(doc->te, selStart - 2, ch)) wrappedOutside = false;
+                if (ByteIs(doc->te, selEnd   + 1, ch)) wrappedOutside = false;
+            }
+        }
+    }
+
+    DocBeforeAction(doc);
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn  = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    if (wrappedInside) {
+        /* Delete the trailing markers first so positions for the head
+           markers don't shift. */
+        TESetSelect(selEnd - n, selEnd, doc->te);
+        TEDelete(doc->te);
+        TESetSelect(selStart, selStart + n, doc->te);
+        TEDelete(doc->te);
+        TESetSelect(selStart, selEnd - 2 * n, doc->te);
+        doc->selAnchor = selStart;
+        cursor = selStart;
+    } else if (wrappedOutside) {
+        TESetSelect(selEnd, selEnd + n, doc->te);
+        TEDelete(doc->te);
+        TESetSelect(selStart - n, selStart, doc->te);
+        TEDelete(doc->te);
+        TESetSelect(selStart - n, selEnd - n, doc->te);
+        doc->selAnchor = selStart - n;
+        cursor = selStart - n;
+    } else if (selStart == selEnd) {
+        /* Empty selection: insert "<pair><pair>" and park between. */
+        TESetSelect(selStart, selStart, doc->te);
+        TEInsert(pair, n, doc->te);
+        TEInsert(pair, n, doc->te);
+        TESetSelect(selStart + n, selStart + n, doc->te);
+        doc->selAnchor = selStart + n;
+        cursor = selStart + n;
+    } else {
+        /* Plain wrap -- markers added on both sides, content reselected. */
+        TESetSelect(selEnd, selEnd, doc->te);
+        TEInsert(pair, n, doc->te);
+        TESetSelect(selStart, selStart, doc->te);
+        TEInsert(pair, n, doc->te);
+        TESetSelect(selStart + n, selEnd + n, doc->te);
+        doc->selAnchor = selStart + n;
+        cursor = selStart + n;
+    }
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+    SetPort(savedPort);
+
+    DocMarkDirty(doc);
+    MdFindLineBounds(doc->te, cursor, &lineStart, &lineEnd);
+    doc->dirtyLineStart = lineStart;
+    doc->dirtyLineEnd   = lineEnd;
     doc->lastDirtyTick  = TickCount() - 1000;
     DocFlushRestyle(doc);
     DocAdjustScrollbar(doc);
@@ -1086,7 +1599,8 @@ short DocOffsetUp(DocState *doc, short pos)
 {
     short lineStart, lineEnd, prevLineStart, prevLineEnd, col, prevLen;
     MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
-    if (lineStart == 0) return 0;
+    if (lineStart == 0)
+        return 0;
     col = pos - lineStart;
     MdFindLineBounds(doc->te, lineStart - 1, &prevLineStart, &prevLineEnd);
     prevLen = prevLineEnd - prevLineStart;
@@ -1098,7 +1612,8 @@ short DocOffsetDown(DocState *doc, short pos)
     short lineStart, lineEnd, nextLineStart, nextLineEnd, col, nextLen;
     short teLen = (**doc->te).teLength;
     MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
-    if (lineEnd >= teLen) return teLen;
+    if (lineEnd >= teLen)
+        return teLen;
     col = pos - lineStart;
     MdFindLineBounds(doc->te, lineEnd + 1, &nextLineStart, &nextLineEnd);
     nextLen = nextLineEnd - nextLineStart;
@@ -1112,15 +1627,22 @@ short DocOffsetWordRight(DocState *doc, short pos)
     CharsHandle ch;
     char *text;
 
-    if (pos == lineEnd) return (pos < teLen) ? pos + 1 : teLen;
+    if (pos == lineEnd)
+        return (pos < teLen) ? pos + 1 : teLen;
 
     ch = TEGetText(doc->te);
     HLock((Handle)ch);
     text = *ch;
 
-    while (pos < lineEnd && !IsWordCharDoc(text[pos])) pos++;
-    if (pos == lineEnd) { HUnlock((Handle)ch); return pos; }
-    while (pos < lineEnd && IsWordCharDoc(text[pos])) pos++;
+    while (pos < lineEnd && !IsWordCharDoc(text[pos]))
+        pos++;
+    if (pos == lineEnd)
+    {
+        HUnlock((Handle)ch);
+        return pos;
+    }
+    while (pos < lineEnd && IsWordCharDoc(text[pos]))
+        pos++;
 
     HUnlock((Handle)ch);
     return pos;
@@ -1132,15 +1654,22 @@ short DocOffsetWordLeft(DocState *doc, short pos)
     CharsHandle ch;
     char *text;
 
-    if (pos == lineStart) return (pos > 0) ? pos - 1 : 0;
+    if (pos == lineStart)
+        return (pos > 0) ? pos - 1 : 0;
 
     ch = TEGetText(doc->te);
     HLock((Handle)ch);
     text = *ch;
 
-    while (pos > lineStart && !IsWordCharDoc(text[pos - 1])) pos--;
-    if (pos == lineStart) { HUnlock((Handle)ch); return pos; }
-    while (pos > lineStart && IsWordCharDoc(text[pos - 1])) pos--;
+    while (pos > lineStart && !IsWordCharDoc(text[pos - 1]))
+        pos--;
+    if (pos == lineStart)
+    {
+        HUnlock((Handle)ch);
+        return pos;
+    }
+    while (pos > lineStart && IsWordCharDoc(text[pos - 1]))
+        pos--;
 
     HUnlock((Handle)ch);
     return pos;
@@ -1163,15 +1692,20 @@ short DocLineEndOffset(DocState *doc, short pos)
 void DocMoveCursorTo(DocState *doc, short newOffset, Boolean extending)
 {
     short teLen = (**doc->te).teLength;
-    if (newOffset < 0)     newOffset = 0;
-    if (newOffset > teLen) newOffset = teLen;
+    if (newOffset < 0)
+        newOffset = 0;
+    if (newOffset > teLen)
+        newOffset = teLen;
 
-    if (extending) {
+    if (extending)
+    {
         short anchor = doc->selAnchor;
         short lo = (anchor < newOffset) ? anchor : newOffset;
         short hi = (anchor > newOffset) ? anchor : newOffset;
         TESetSelect(lo, hi, doc->te);
-    } else {
+    }
+    else
+    {
         TESetSelect(newOffset, newOffset, doc->te);
         doc->selAnchor = newOffset;
     }
@@ -1195,7 +1729,7 @@ static void IndentRange(DocState *doc, Boolean indent)
 
     DocBeforeAction(doc);
     selStart = (**doc->te).selStart;
-    selEnd   = (**doc->te).selEnd;
+    selEnd = (**doc->te).selEnd;
     isSelection = (selStart != selEnd);
 
     MdFindLineBounds(doc->te, selStart, &firstLs, &firstLe);
@@ -1203,36 +1737,42 @@ static void IndentRange(DocState *doc, Boolean indent)
     MdFindLineBounds(doc->te, endProbe, &lastLs, &lastLe);
 
     firstLineStart = firstLs;
-    lastLineEnd    = lastLe;
+    lastLineEnd = lastLe;
 
     GetPort(&savedPort);
     SetPort(doc->window);
     savedClip = NewRgn();
-    emptyRgn  = NewRgn();
+    emptyRgn = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
     pos = lastLs;
-    for (;;) {
-        if (indent) {
+    for (;;)
+    {
+        if (indent)
+        {
             char tab = '\t';
             TESetSelect(pos, pos, doc->te);
             TEInsert(&tab, 1, doc->te);
             totalDelta++;
-        } else {
+        }
+        else
+        {
             CharsHandle ch = TEGetText(doc->te);
             char c0;
             HLock((Handle)ch);
             c0 = (*ch)[pos];
             HUnlock((Handle)ch);
-            if (c0 == '\t' || c0 == ' ') {
+            if (c0 == '\t' || c0 == ' ')
+            {
                 TESetSelect(pos, pos + 1, doc->te);
                 TEDelete(doc->te);
                 totalDelta--;
             }
         }
 
-        if (pos == firstLineStart) break;
+        if (pos == firstLineStart)
+            break;
         {
             short prevLs, prevLe;
             MdFindLineBounds(doc->te, pos - 1, &prevLs, &prevLe);
@@ -1245,33 +1785,44 @@ static void IndentRange(DocState *doc, Boolean indent)
     DisposeRgn(emptyRgn);
     SetPort(savedPort);
 
-    if (totalDelta == 0) { SysBeep(1); return; }
-
-    if (isSelection) {
-        newStart = firstLineStart;
-        newEnd   = selEnd + totalDelta;
-    } else if (indent) {
-        newStart = selStart + 1;
-        newEnd   = newStart;
-    } else {
-        newStart = (selStart > firstLineStart) ? selStart - 1 : firstLineStart;
-        newEnd   = newStart;
+    if (totalDelta == 0)
+    {
+        SysBeep(1);
+        return;
     }
-    if (newStart < 0)               newStart = 0;
-    if (newEnd   < firstLineStart)  newEnd   = firstLineStart;
+
+    if (isSelection)
+    {
+        newStart = firstLineStart;
+        newEnd = selEnd + totalDelta;
+    }
+    else if (indent)
+    {
+        newStart = selStart + 1;
+        newEnd = newStart;
+    }
+    else
+    {
+        newStart = (selStart > firstLineStart) ? selStart - 1 : firstLineStart;
+        newEnd = newStart;
+    }
+    if (newStart < 0)
+        newStart = 0;
+    if (newEnd < firstLineStart)
+        newEnd = firstLineStart;
 
     TESetSelect(newStart, newEnd, doc->te);
     doc->selAnchor = newStart;
 
     DocMarkDirty(doc);
     doc->dirtyLineStart = firstLineStart;
-    doc->dirtyLineEnd   = lastLineEnd + totalDelta;
-    doc->lastDirtyTick  = TickCount() - 1000;
+    doc->dirtyLineEnd = lastLineEnd + totalDelta;
+    doc->lastDirtyTick = TickCount() - 1000;
     DocFlushRestyle(doc);
     DocAdjustScrollbar(doc);
 }
 
-void DocIndentLine(DocState *doc)  { IndentRange(doc, true); }
+void DocIndentLine(DocState *doc) { IndentRange(doc, true); }
 void DocOutdentLine(DocState *doc) { IndentRange(doc, false); }
 
 /* ---- I-beam cursor ---- */
@@ -1285,7 +1836,8 @@ void DocAdjustCursor(void)
     Rect viewR;
     CursHandle iBeam;
 
-    if (doc == NULL || doc->window == NULL) {
+    if (doc == NULL || doc->window == NULL)
+    {
         InitCursor();
         return;
     }
@@ -1294,11 +1846,16 @@ void DocAdjustCursor(void)
     SetPort(w);
     GetMouse(&mouse);
     viewR = (**doc->te).viewRect;
-    if (PtInRect(mouse, &viewR)) {
+    if (PtInRect(mouse, &viewR))
+    {
         iBeam = GetCursor(iBeamCursor);
-        if (iBeam) SetCursor(*iBeam);
-        else       InitCursor();
-    } else {
+        if (iBeam)
+            SetCursor(*iBeam);
+        else
+            InitCursor();
+    }
+    else
+    {
         InitCursor();
     }
     SetPort(savedPort);
@@ -1316,8 +1873,10 @@ static Handle SnapshotText(DocState *doc, short *outLen)
     short len = (**doc->te).teLength;
     Handle h = NewHandle(len);
     CharsHandle ch;
-    if (h == NULL) return NULL;
-    if (len > 0) {
+    if (h == NULL)
+        return NULL;
+    if (len > 0)
+    {
         HLock(h);
         ch = TEGetText(doc->te);
         HLock((Handle)ch);
@@ -1325,7 +1884,8 @@ static Handle SnapshotText(DocState *doc, short *outLen)
         HUnlock((Handle)ch);
         HUnlock(h);
     }
-    if (outLen) *outLen = len;
+    if (outLen)
+        *outLen = len;
     return h;
 }
 
@@ -1333,24 +1893,41 @@ static void SaveUndoSnapshot(DocState *doc)
 {
     short len;
     Handle h = SnapshotText(doc, &len);
-    if (h == NULL) return;
-    if (doc->undoText) DisposeHandle(doc->undoText);
-    doc->undoText     = h;
-    doc->undoLen      = len;
+    if (h == NULL)
+        return;
+    if (doc->undoText)
+        DisposeHandle(doc->undoText);
+    doc->undoText = h;
+    doc->undoLen = len;
     doc->undoSelStart = (**doc->te).selStart;
-    doc->undoSelEnd   = (**doc->te).selEnd;
-    doc->undoLE       = doc->leKind;
-    doc->canUndo      = true;
+    doc->undoSelEnd = (**doc->te).selEnd;
+    doc->undoLE = doc->leKind;
+    doc->canUndo = true;
     SetUndoMenuEnabled(true);
 }
 
-void DocBeforeAction(DocState *doc)  { SaveUndoSnapshot(doc); doc->inTypingRun = false; }
-void DocBeforeTyping(DocState *doc)  { if (!doc->inTypingRun) { SaveUndoSnapshot(doc); doc->inTypingRun = true; } }
-void DocBreakTypingRun(DocState *doc){ doc->inTypingRun = false; }
+void DocBeforeAction(DocState *doc)
+{
+    SaveUndoSnapshot(doc);
+    doc->inTypingRun = false;
+}
+void DocBeforeTyping(DocState *doc)
+{
+    if (!doc->inTypingRun)
+    {
+        SaveUndoSnapshot(doc);
+        doc->inTypingRun = true;
+    }
+}
+void DocBreakTypingRun(DocState *doc) { doc->inTypingRun = false; }
 
 void DocClearUndo(DocState *doc)
 {
-    if (doc->undoText) { DisposeHandle(doc->undoText); doc->undoText = NULL; }
+    if (doc->undoText)
+    {
+        DisposeHandle(doc->undoText);
+        doc->undoText = NULL;
+    }
     doc->canUndo = false;
     doc->inTypingRun = false;
     SetUndoMenuEnabled(false);
@@ -1365,19 +1942,27 @@ void DocUndo(DocState *doc)
     GrafPtr savedPort;
     RgnHandle savedClip, emptyRgn;
 
-    if (doc == NULL || !doc->canUndo || doc->undoText == NULL) { SysBeep(1); return; }
+    if (doc == NULL || !doc->canUndo || doc->undoText == NULL)
+    {
+        SysBeep(1);
+        return;
+    }
 
     /* Stash current state so a second Cmd-Z toggles back (redo). */
     curText = SnapshotText(doc, &curLen);
-    if (curText == NULL) { SysBeep(1); return; }
+    if (curText == NULL)
+    {
+        SysBeep(1);
+        return;
+    }
     curSelStart = (**doc->te).selStart;
-    curSelEnd   = (**doc->te).selEnd;
-    curLE       = doc->leKind;
+    curSelEnd = (**doc->te).selEnd;
+    curLE = doc->leKind;
 
     GetPort(&savedPort);
     SetPort(doc->window);
     savedClip = NewRgn();
-    emptyRgn  = NewRgn();
+    emptyRgn = NewRgn();
     GetClip(savedClip);
     SetClip(emptyRgn);
 
@@ -1387,7 +1972,7 @@ void DocUndo(DocState *doc)
 
     TESetSelect(doc->undoSelStart, doc->undoSelEnd, doc->te);
     doc->selAnchor = doc->undoSelStart;
-    doc->leKind    = doc->undoLE;
+    doc->leKind = doc->undoLE;
 
     MdRestyleAll(doc->te);
     TECalText(doc->te);
@@ -1397,13 +1982,13 @@ void DocUndo(DocState *doc)
     DisposeRgn(emptyRgn);
 
     DisposeHandle(doc->undoText);
-    doc->undoText     = curText;
-    doc->undoLen      = curLen;
+    doc->undoText = curText;
+    doc->undoLen = curLen;
     doc->undoSelStart = curSelStart;
-    doc->undoSelEnd   = curSelEnd;
-    doc->undoLE       = curLE;
-    doc->canUndo      = true;
-    doc->inTypingRun  = false;
+    doc->undoSelEnd = curSelEnd;
+    doc->undoLE = curLE;
+    doc->canUndo = true;
+    doc->inTypingRun = false;
 
     doc->dirty = true;
     DocUpdateTitle(doc);

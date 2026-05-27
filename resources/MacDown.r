@@ -65,12 +65,26 @@ resource 'MENU' (131, "Format") {
     131, textMenuProc, allEnabled, enabled,
     "Format",
     {
-        "Toggle Task",                noIcon, "L",    noMark, plain;
+        "Bold",                       noIcon, "B",    noMark, plain;
+        "Italic",                     noIcon, "I",    noMark, plain;
+        "Code",                       noIcon, noKey,  noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
+        "Heading 1",                  noIcon, "1",    noMark, plain;
+        "Heading 2",                  noIcon, "2",    noMark, plain;
+        "Heading 3",                  noIcon, "3",    noMark, plain;
+        "Heading 4",                  noIcon, "4",    noMark, plain;
+        "Heading 5",                  noIcon, "5",    noMark, plain;
+        "Heading 6",                  noIcon, "6",    noMark, plain;
+        "No Heading",                 noIcon, "0",    noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
         "Insert Link",                noIcon, "K",    noMark, plain;
+        "Insert Horizontal Rule",     noIcon, noKey,  noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
+        "Toggle Task",                noIcon, "L",    noMark, plain;
+        "Duplicate Line",             noIcon, "D",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Indent",                     noIcon, "]",    noMark, plain;
         "Outdent",                    noIcon, "[",    noMark, plain;
-        "Duplicate Line",             noIcon, "D",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Re-style Document",          noIcon, noKey,  noMark, plain;
     }

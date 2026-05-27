@@ -112,6 +112,49 @@ static void ApplyFace(TEHandle te, short start, short end, short face)
     TESetStyle(doFace, &ts, false, te);
 }
 
+/* Code span: switch to Monaco (the only monospace font universally
+   present on classic Mac); keep the surrounding face/size so the run
+   inherits the current line's height. The backticks themselves stay
+   in the normal font so they remain visually distinct. */
+static void ApplyCode(TEHandle te, short start, short end)
+{
+    TextStyle ts;
+    ts.tsFont  = 4;        /* Monaco */
+    ts.tsFace  = 0;
+    ts.tsSize  = 0;
+    ts.tsColor.red = ts.tsColor.green = ts.tsColor.blue = 0;
+    TESetSelect(start, end, te);
+    TESetStyle(doFont, &ts, false, te);
+}
+
+/* Scan for backtick code spans: `code`. Simpler rule than emphasis --
+   matched pair, content not whitespace, no flanking constraints. */
+static void StyleInlineCode(TEHandle te,
+                            const char *text, short lineStart, short lineLen)
+{
+    short i = 0;
+    while (i < lineLen) {
+        short opener, closer, contentStart;
+        if (text[i] != '`') { i++; continue; }
+        opener = i;
+        contentStart = i + 1;
+        if (contentStart >= lineLen) break;
+        if (text[contentStart] == ' ' || text[contentStart] == '\t') {
+            i++; continue;
+        }
+        closer = -1;
+        {
+            short j;
+            for (j = contentStart; j < lineLen; j++) {
+                if (text[j] == '`') { closer = j; break; }
+            }
+        }
+        if (closer < 0) break;
+        ApplyCode(te, lineStart + contentStart, lineStart + closer);
+        i = closer + 1;
+    }
+}
+
 /* Scan one line for *...*, **...**, _..._, __...__ runs and bold their
    content. Single-pass: when we see a delimiter, find the matching one
    that satisfies the "flanking" rule (left side preceded by start-of-
@@ -236,6 +279,7 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
     /* Inline emphasis scan. */
     StyleInlineEmphasis(te, text, lineStart, lineLen);
+    StyleInlineCode(te, text, lineStart, lineLen);
 
     HUnlock((Handle)ch);
 
@@ -371,6 +415,130 @@ Boolean MdNextListMarker(TEHandle te, short pos,
 
     HUnlock((Handle)ch);
     return result;
+}
+
+/* ---- ordered list renumber ---- */
+
+/* Read the integer at the start of an ordered-list line. Returns -1
+   if `lineStart` isn't an ordered list item. `outDigitsStart` and
+   `outDigitsEnd` (if non-null) receive the byte offsets of the
+   digit run within the line so the caller knows what to replace. */
+static long ReadOrderedNumber(TEHandle te,
+                              short lineStart, short lineEnd,
+                              short *outDigitsStart, short *outDigitsEnd)
+{
+    CharsHandle ch;
+    char *text;
+    short i, digitsStart;
+    long  n;
+    MdLineKind kind;
+
+    if (lineStart >= lineEnd) return -1;
+    ch = TEGetText(te);
+    HLock((Handle)ch);
+    text = *ch + lineStart;
+    kind = MdClassifyLine(text, lineEnd - lineStart);
+    if (kind != kLine_OrderedItem) { HUnlock((Handle)ch); return -1; }
+
+    i = 0;
+    while (i < lineEnd - lineStart && text[i] == ' ') i++;
+    digitsStart = i;
+    n = 0;
+    while (i < lineEnd - lineStart && text[i] >= '0' && text[i] <= '9') {
+        n = n * 10 + (text[i] - '0');
+        i++;
+    }
+    HUnlock((Handle)ch);
+
+    if (outDigitsStart) *outDigitsStart = lineStart + digitsStart;
+    if (outDigitsEnd)   *outDigitsEnd   = lineStart + i;
+    return n;
+}
+
+/* Adjust a tracked caret position after a digit-run replacement.
+   `start`/`end` are the bounds of the OLD digit run; `bufLen` is the
+   length of the new run. Positions strictly before the run are
+   unchanged; positions at or beyond the old end shift by the delta;
+   positions inside the old run land at the new run's end. */
+static void AdjustCaret(short *caret, short start, short end, short bufLen)
+{
+    short delta;
+    if (caret == NULL) return;
+    delta = bufLen - (end - start);
+    if (*caret >= end) {
+        *caret += delta;
+    } else if (*caret > start) {
+        *caret = start + bufLen;
+    }
+}
+
+long MdRenumberOrderedList(TEHandle te, short lineStart,
+                           short *ioSelStart, short *ioSelEnd)
+{
+    short lineEnd;
+    long  curNum;
+    long  expected;
+    long  totalDelta = 0;
+    short scanFrom;
+    short teLen;
+
+    /* Identify the list head: walk backwards while the previous line
+       is also an ordered item. Whatever number the head currently
+       has, that's where the sequence starts. */
+    MdFindLineBounds(te, lineStart, &lineStart, &lineEnd);
+    if (ReadOrderedNumber(te, lineStart, lineEnd, NULL, NULL) < 0) return 0;
+
+    while (lineStart > 0) {
+        short pLs, pLe;
+        MdFindLineBounds(te, lineStart - 1, &pLs, &pLe);
+        if (ReadOrderedNumber(te, pLs, pLe, NULL, NULL) < 0) break;
+        lineStart = pLs;
+        lineEnd   = pLe;
+    }
+
+    curNum = ReadOrderedNumber(te, lineStart, lineEnd, NULL, NULL);
+    if (curNum < 0) return 0;
+    expected = curNum + 1;
+    scanFrom = lineEnd;
+
+    for (;;) {
+        short ls, le;
+        short digitsStart, digitsEnd;
+        long  oldNum;
+        char  buf[8];
+        short bufLen, k, m;
+        long  tmp;
+
+        teLen = (**te).teLength;
+        if (scanFrom >= teLen) break;
+        MdFindLineBounds(te, scanFrom + 1, &ls, &le);
+        oldNum = ReadOrderedNumber(te, ls, le, &digitsStart, &digitsEnd);
+        if (oldNum < 0) break;
+
+        if (oldNum != expected) {
+            /* Format expected into buf (reversed, then output). */
+            bufLen = 0;
+            tmp = expected;
+            if (tmp == 0) buf[bufLen++] = '0';
+            else { while (tmp > 0) { buf[bufLen++] = (char)('0' + (tmp % 10)); tmp /= 10; } }
+            /* Reverse in place. */
+            for (k = 0, m = bufLen - 1; k < m; k++, m--) {
+                char t = buf[k]; buf[k] = buf[m]; buf[m] = t;
+            }
+            TESetSelect(digitsStart, digitsEnd, te);
+            TEDelete(te);
+            TEInsert(buf, bufLen, te);
+            AdjustCaret(ioSelStart, digitsStart, digitsEnd, bufLen);
+            AdjustCaret(ioSelEnd,   digitsStart, digitsEnd, bufLen);
+            totalDelta += (long)(bufLen - (digitsEnd - digitsStart));
+            /* le shifted; recompute end-of-line so we walk past it next loop. */
+            MdFindLineBounds(te, ls, &ls, &le);
+        }
+        expected++;
+        scanFrom = le;
+    }
+
+    return totalDelta;
 }
 
 /* ---- task box locator ---- */

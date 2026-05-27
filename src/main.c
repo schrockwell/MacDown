@@ -43,12 +43,23 @@
 #define kEditClear    6
 #define kEditSelAll   7
 
-#define kFormatToggleTask 1
-#define kFormatInsertLink 2
-#define kFormatIndent     4
-#define kFormatOutdent    5
-#define kFormatDuplicate  6
-#define kFormatRestyleAll 8
+#define kFormatBold       1
+#define kFormatItalic     2
+#define kFormatCode       3
+#define kFormatH1         5
+#define kFormatH2         6
+#define kFormatH3         7
+#define kFormatH4         8
+#define kFormatH5         9
+#define kFormatH6         10
+#define kFormatNoHeading  11
+#define kFormatInsertLink 13
+#define kFormatInsertHR   14
+#define kFormatToggleTask 16
+#define kFormatDuplicate  17
+#define kFormatIndent     19
+#define kFormatOutdent    20
+#define kFormatRestyleAll 22
 
 #define kAboutItem      1
 #define kShortcutsItem  2
@@ -253,6 +264,17 @@ static Boolean HandleReturnKey(DocState *doc)
 
     TEKey('\r', doc->te);
     InsertMarker(doc, marker);
+    /* If we just inserted a continuation for an ordered list, renumber
+       the subsequent items so the sequence stays correct. Each per-
+       line digit-run rewrite via TEDelete/TEInsert moves the TE
+       cursor, even when the totals cancel out -- so always restore. */
+    {
+        short selStart = (**doc->te).selStart;
+        short selEnd   = (**doc->te).selEnd;
+        (void) MdRenumberOrderedList(doc->te, selStart, &selStart, &selEnd);
+        TESetSelect(selStart, selEnd, doc->te);
+        doc->selAnchor = selStart;
+    }
     DocMarkDirty(doc);
     DocMarkLineDirty(doc, (**doc->te).selStart);
     return true;
@@ -281,8 +303,8 @@ static void HandleKey(EventRecord *ev)
         case kKC_Ext_Down:  case kKC_KP_Down:  c = kDownArrow;  break;
     }
 
-    /* Cmd-` cycles to the next window. Done before MenuKey because the
-       backtick isn't a real menu key equivalent. */
+    /* Cmd-` cycles to the next window. Done before MenuKey because
+       the backtick isn't a real menu key equivalent. */
     if (cmd && (c == '`' || c == '~')) {
         DocCycleWindow();
         return;
@@ -370,6 +392,7 @@ static void HandleKey(EventRecord *ev)
         switch (c) {
             case '*': openCh = '*'; closeCh = '*'; break;
             case '_': openCh = '_'; closeCh = '_'; break;
+            case '`': openCh = '`'; closeCh = '`'; break;
             case '(': openCh = '('; closeCh = ')'; break;
             case '[': openCh = '['; closeCh = ']'; break;
         }
@@ -782,11 +805,22 @@ static void HandleMenu(long mResult)
         case kFormatMenuID:
             if (doc == NULL) break;
             switch (item) {
-                case kFormatToggleTask: DoToggleTask(doc); break;
+                case kFormatBold:       DocWrapPair(doc, '*', 2); break;
+                case kFormatItalic:     DocWrapPair(doc, '*', 1); break;
+                case kFormatCode:       DocWrapPair(doc, '`', 1); break;
+                case kFormatH1:         DocToggleHeading(doc, 1); break;
+                case kFormatH2:         DocToggleHeading(doc, 2); break;
+                case kFormatH3:         DocToggleHeading(doc, 3); break;
+                case kFormatH4:         DocToggleHeading(doc, 4); break;
+                case kFormatH5:         DocToggleHeading(doc, 5); break;
+                case kFormatH6:         DocToggleHeading(doc, 6); break;
+                case kFormatNoHeading:  DocToggleHeading(doc, 0); break;
                 case kFormatInsertLink: DoInsertLink(doc); break;
+                case kFormatInsertHR:   DocInsertHRule(doc); break;
+                case kFormatToggleTask: DoToggleTask(doc); break;
+                case kFormatDuplicate:  DocDuplicateLine(doc); break;
                 case kFormatIndent:     DocIndentLine(doc); break;
                 case kFormatOutdent:    DocOutdentLine(doc); break;
-                case kFormatDuplicate:  DocDuplicateLine(doc); break;
                 case kFormatRestyleAll: MdRestyleAll(doc->te);
                                         InvalRect(&doc->window->portRect);
                                         break;
