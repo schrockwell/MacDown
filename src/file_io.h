@@ -27,6 +27,10 @@ OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD);
    own slot so it stays put for subsequent saves. */
 OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD);
 
+/* Read-only: convert any wdRefNum (or real vRefNum) into the
+   underlying (vRefNum, dirID) pair without opening a new wd slot. */
+OSErr FileIOResolveWD(short anyWDRefNum, short *outVRefNum, long *outDirID);
+
 /* Release an owned wdRefNum. Call from DocClose when hasFile. */
 void  FileIOReleaseWD(short ownedWD);
 

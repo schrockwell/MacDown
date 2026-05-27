@@ -128,12 +128,10 @@ OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD)
     return noErr;
 }
 
-OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD)
+OSErr FileIOResolveWD(short anyWDRefNum, short *outVRefNum, long *outDirID)
 {
     WDPBRec pb;
     OSErr err;
-    /* Resolve whatever ref we were given (may already be a real
-       vRefNum, may be a wdRefNum from SF) into (vRefNum, dirID). */
     pb.ioCompletion = NULL;
     pb.ioNamePtr    = NULL;
     pb.ioVRefNum    = anyWDRefNum;
@@ -142,7 +140,18 @@ OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD)
     pb.ioWDVRefNum  = 0;
     err = PBGetWDInfoSync(&pb);
     if (err != noErr) return err;
-    return FileIOOwnWDFromDir(pb.ioWDVRefNum, pb.ioWDDirID, outOwnedWD);
+    if (outVRefNum) *outVRefNum = pb.ioWDVRefNum;
+    if (outDirID)   *outDirID   = pb.ioWDDirID;
+    return noErr;
+}
+
+OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD)
+{
+    short realVRef;
+    long  realDirID;
+    OSErr err = FileIOResolveWD(anyWDRefNum, &realVRef, &realDirID);
+    if (err != noErr) return err;
+    return FileIOOwnWDFromDir(realVRef, realDirID, outOwnedWD);
 }
 
 void FileIOReleaseWD(short ownedWD)

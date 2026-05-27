@@ -33,7 +33,7 @@
 #define kFileMenuSave 4
 #define kFileMenuSaveAs 5
 #define kWindowsMenuID 132
-#define kWindowsMenuStaticItems 2 /* Next, separator */
+#define kWindowsMenuStaticItems 3 /* Next, Browser, separator */
 
 DocState *gDocs = NULL;
 
@@ -523,9 +523,49 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 
 /* Take any folder ref (a wdRefNum from Standard File / AppFile, or
    even a plain volume ref) and own it before opening the document. */
+/* Find an open doc that already maps to the same (real volume,
+   dirID, name) -- so re-opening the same file just raises the
+   existing window instead of creating a duplicate. Case-insensitive
+   filename compare so callers coming from different code paths
+   (HFS is case-preserving but case-insensitive) all match. */
+DocState *DocFindOpenFile(short vRefNum, long dirID, ConstStr255Param name)
+{
+    DocState *d;
+    for (d = gDocs; d != NULL; d = d->next) {
+        short dVRef;
+        long  dDirID;
+        short i;
+        Boolean equal;
+        if (!d->hasFile) continue;
+        if (FileIOResolveWD(d->vRefNum, &dVRef, &dDirID) != noErr) continue;
+        if (dVRef != vRefNum || dDirID != dirID) continue;
+        if (d->fileName[0] != name[0]) continue;
+        equal = true;
+        for (i = 1; i <= name[0]; i++) {
+            unsigned char a = (unsigned char)d->fileName[i];
+            unsigned char b = (unsigned char)name[i];
+            if (a >= 'A' && a <= 'Z') a += 32;
+            if (b >= 'A' && b <= 'Z') b += 32;
+            if (a != b) { equal = false; break; }
+        }
+        if (equal) return d;
+    }
+    return NULL;
+}
+
 Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
 {
     short ownedWD;
+    short vRef;
+    long  dirID;
+
+    /* If the file is already open in another window, just raise that
+       window -- don't create a duplicate. */
+    if (FileIOResolveWD(anyWDRefNum, &vRef, &dirID) == noErr) {
+        DocState *existing = DocFindOpenFile(vRef, dirID, name);
+        if (existing) { SelectWindow(existing->window); return true; }
+    }
+
     if (FileIOOwnWD(anyWDRefNum, &ownedWD) != noErr)
     {
         ShowError(kErrCantOpen);
@@ -539,6 +579,12 @@ Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
 Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
 {
     short ownedWD;
+
+    {
+        DocState *existing = DocFindOpenFile(vRefNum, dirID, name);
+        if (existing) { SelectWindow(existing->window); return true; }
+    }
+
     if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr)
     {
         ShowError(kErrCantOpen);

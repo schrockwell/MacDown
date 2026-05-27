@@ -53,6 +53,11 @@ Boolean DocCloseAll(void);                   /* prompt-and-close every doc; fals
 DocState *DocFromWindow(WindowPtr w);
 DocState *DocActive(void); /* DocFromWindow(FrontWindow()) */
 
+/* Find an open doc that already maps to (vRefNum, dirID, name).
+   Returns NULL if none. Case-insensitive name compare so callers
+   matching against HFS catalog data don't have to normalize. */
+DocState *DocFindOpenFile(short vRefNum, long dirID, ConstStr255Param name);
+
 /* Windows menu. */
 void RebuildWindowsMenu(void);
 void DocSelectFromMenu(short menuItem); /* 1-based into dynamic doc items */

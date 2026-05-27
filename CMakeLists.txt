@@ -5,6 +5,7 @@ add_application(MacDown
     src/main.c
     src/document.c
     src/file_io.c
+    src/browser.c
     src/markdown.c
     src/apple_events.c
     resources/MacDown.r

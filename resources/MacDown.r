@@ -99,6 +99,7 @@ resource 'MENU' (132, "Window") {
     132, textMenuProc, allEnabled, enabled,
     "Window",
     {
+        "Browser",                    noIcon, "/",    noMark, plain;
         "Next Window (Cmd-`)",        noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
     }
@@ -125,6 +126,18 @@ resource 'WIND' (130, "Shortcuts") {
     noGoAway,
     0x0,
     "",
+    noAutoCenter
+};
+
+/* ---- Browser window ---- */
+
+resource 'WIND' (131, "Browser") {
+    { 40, 20, 250, 200 },     /* 210 tall x 180 wide, top-left of screen */
+    zoomDocProc,
+    visible,
+    goAway,
+    0x0,
+    "Browser",
     noAutoCenter
 };
 

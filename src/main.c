@@ -16,6 +16,7 @@
 
 #include "document.h"
 #include "file_io.h"
+#include "browser.h"
 #include "markdown.h"
 #include "apple_events.h"
 
@@ -27,8 +28,9 @@
 #define kWindowsMenuID 132
 #define kLineMenuID    133
 
-#define kWindowsMenuNext 1
-#define kWindowsMenuStaticItems 2
+#define kWindowsMenuBrowser  1
+#define kWindowsMenuNext     2
+#define kWindowsMenuStaticItems 3
 
 #define kFileNew      1
 #define kFileOpen     2
@@ -148,6 +150,7 @@ static void HandleMouse(EventRecord *ev)
     WindowPtr w;
     short part = FindWindow(ev->where, &w);
     DocState *doc = DocFromWindow(w);
+    Boolean isBrowser = BrowserIsWindow(w);
 
     switch (part) {
         case inMenuBar:
@@ -173,16 +176,30 @@ static void HandleMouse(EventRecord *ev)
                     SizeWindow(w, LoWord(sz), HiWord(sz), true);
                     DocResize(doc);
                 }
+            } else if (isBrowser) {
+                long sz;
+                Rect limits;
+                SetRect(&limits, 140, 160, qd.screenBits.bounds.right,
+                        qd.screenBits.bounds.bottom);
+                sz = GrowWindow(w, ev->where, &limits);
+                if (sz != 0) {
+                    SizeWindow(w, LoWord(sz), HiWord(sz), true);
+                    BrowserResize();
+                }
             }
             break;
         case inGoAway:
             if (doc && TrackGoAway(w, ev->where)) DocClose(doc);
+            else if (isBrowser && TrackGoAway(w, ev->where)) BrowserClose();
             break;
         case inZoomIn:
         case inZoomOut:
             if (doc && TrackBox(w, ev->where, part)) {
                 ZoomWindow(w, part, true);
                 DocResize(doc);
+            } else if (isBrowser && TrackBox(w, ev->where, part)) {
+                ZoomWindow(w, part, true);
+                BrowserResize();
             }
             break;
         case inContent:
@@ -190,6 +207,8 @@ static void HandleMouse(EventRecord *ev)
                 SelectWindow(w);
             } else if (doc) {
                 DocClick(doc, ev);
+            } else if (isBrowser) {
+                BrowserClick(ev);
             }
             break;
     }
@@ -599,7 +618,7 @@ static void DrawAboutContent(WindowPtr w)
     TextSize(12);
     TextFace(bold);
     MoveTo(24, 32);
-    DrawString("\pMdEdit");
+    DrawString("\pMacDown");
 
     TextFace(0);
     MoveTo(24, 54);
@@ -608,7 +627,7 @@ static void DrawAboutContent(WindowPtr w)
     MoveTo(24, 82);
     DrawString("\pA small Markdown editor for classic Mac OS.");
     MoveTo(24, 100);
-    DrawString("\pBuilt with Retro68 / VibeRetro68.");
+    DrawString("\pBy Rockwell Schrock (@schrockwell)");
 
     TextFace(italic);
     MoveTo(24, 128);
@@ -832,7 +851,8 @@ static void HandleMenu(long mResult)
             break;
 
         case kWindowsMenuID:
-            if (item == kWindowsMenuNext) DocCycleWindow();
+            if (item == kWindowsMenuNext)         DocCycleWindow();
+            else if (item == kWindowsMenuBrowser) BrowserToggle();
             else if (item > kWindowsMenuStaticItems) {
                 DocSelectFromMenu(item - kWindowsMenuStaticItems);
             }
@@ -863,13 +883,18 @@ int main(void)
                 case keyDown:
                 case autoKey:      HandleKey(&event); break;
                 case updateEvt: {
-                    DocState *d = DocFromWindow((WindowPtr)event.message);
+                    WindowPtr uw = (WindowPtr)event.message;
+                    DocState *d = DocFromWindow(uw);
                     if (d) DocUpdate(d);
+                    else if (BrowserIsWindow(uw)) BrowserUpdate();
                     break;
                 }
                 case activateEvt: {
-                    DocState *d = DocFromWindow((WindowPtr)event.message);
+                    WindowPtr aw = (WindowPtr)event.message;
+                    DocState *d = DocFromWindow(aw);
                     if (d) DocActivate(d, (event.modifiers & activeFlag) != 0);
+                    else if (BrowserIsWindow(aw))
+                        BrowserActivate((event.modifiers & activeFlag) != 0);
                     break;
                 }
                 case kHighLevelEvent:
@@ -879,12 +904,16 @@ int main(void)
                     if ((event.message >> 24) == 0x01) {
                         DocState *d = DocActive();
                         if (d) DocActivate(d, (event.message & 0x01) != 0);
+                        else if (BrowserIsWindow(FrontWindow()))
+                            BrowserActivate((event.message & 0x01) != 0);
                     }
                     break;
             }
         }
 
-        /* Idle work for the active doc only. */
+        /* Idle work: TE caret blink + restyle for the active doc, and
+           a throttled directory-mod-date poll for the browser so it
+           auto-refreshes when files are added/removed by anyone. */
         {
             DocState *d = DocActive();
             if (d) {
@@ -895,6 +924,7 @@ int main(void)
                     DocAdjustScrollbar(d);
                 }
             }
+            BrowserIdle();
             DocAdjustCursor();
         }
     }

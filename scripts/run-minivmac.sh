@@ -38,3 +38,13 @@ fi
 
 open -a "$MINIVMAC_APP" "$DSK"
 echo "Launched Mini vMac with $(basename "$DSK")"
+
+# Auto-magnify (Ctrl-M). Mini vMac doesn't persist this across launches
+# so we toggle it once the window is up. Needs Accessibility permission
+# for whatever's running this script (Terminal / iTerm / VS Code). If
+# the keystroke can't be delivered, no harm -- press Ctrl-M manually.
+sleep 1
+osascript \
+    -e 'tell application "System Events" to keystroke "m" using {control down}' \
+    >/dev/null 2>&1 \
+    || echo "  (couldn't auto-magnify -- press Ctrl-M manually, or grant Accessibility permission to this terminal)"
