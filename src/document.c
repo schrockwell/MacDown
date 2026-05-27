@@ -49,6 +49,72 @@ static DocState *FindEmptyUntitledDoc(void);
 
 /* ---- helpers ---- */
 
+/* Double-buffered redraw. The flicker during live restyle comes from
+   the EraseRect+TEUpdate sequence painting two distinct frames to
+   the screen. Drawing into an offscreen GrafPort and CopyBits'ing
+   the result eliminates the gap -- the screen jumps from "old text"
+   straight to "new text" with no flash of empty white in between. */
+typedef struct {
+    GrafPort port;
+    BitMap   bm;
+    Ptr      bits;
+    Boolean  active;
+} OffscreenBuf;
+
+static OffscreenBuf gOffscreen;
+
+/* Begin offscreen drawing into a buffer matching `r` (window coords).
+   On success: current port is the offscreen, already cleared to white
+   and clipped to `r`. Caller should draw, then call OffscreenCopyAndEnd.
+   On failure: returns false; current port is unchanged. */
+static Boolean OffscreenBegin(const Rect *r)
+{
+    GrafPtr savedPort;
+    short width  = r->right  - r->left;
+    short height = r->bottom - r->top;
+    short rowBytes;
+    long  pixSize;
+
+    if (gOffscreen.active) return false;
+    if (width <= 0 || height <= 0) return false;
+
+    /* rowBytes must be a multiple of 2; round up to 16-bit. */
+    rowBytes = ((width + 15) >> 4) << 1;
+    pixSize  = (long)rowBytes * (long)height;
+    if (pixSize <= 0) return false;
+
+    gOffscreen.bits = NewPtrClear(pixSize);
+    if (gOffscreen.bits == NULL) return false;
+
+    gOffscreen.bm.baseAddr = gOffscreen.bits;
+    gOffscreen.bm.rowBytes = rowBytes;
+    gOffscreen.bm.bounds   = *r;
+
+    GetPort(&savedPort);
+    OpenPort(&gOffscreen.port);
+    SetPortBits(&gOffscreen.bm);
+    gOffscreen.port.portRect = *r;
+    ClipRect(r);
+    EraseRect(r);
+    /* Leave offscreen port as the current port for the caller's draws. */
+    (void)savedPort;
+    gOffscreen.active = true;
+    return true;
+}
+
+/* Copy the offscreen buffer to `dest` at the original rect, then
+   tear down the offscreen port. */
+static void OffscreenCopyAndEnd(GrafPtr dest, const Rect *r)
+{
+    if (!gOffscreen.active) return;
+    SetPort(dest);
+    CopyBits(&gOffscreen.bm, &dest->portBits, r, r, srcCopy, NULL);
+    ClosePort(&gOffscreen.port);
+    DisposePtr(gOffscreen.bits);
+    gOffscreen.bits   = NULL;
+    gOffscreen.active = false;
+}
+
 static void ShowError(short stringIndex)
 {
     Handle h = GetResource('STR#', kErrStrListID);
@@ -1102,8 +1168,22 @@ void DocFlushRestyle(DocState *doc)
 
     if (drawRect.bottom > drawRect.top)
     {
-        EraseRect(&drawRect);
-        TEUpdate(&drawRect, doc->te);
+        if (OffscreenBegin(&drawRect)) {
+            /* TE saves the GrafPort it was created in (TERec.inPort)
+               and draws directly into THAT port -- ignoring the
+               current port. Retarget inPort to the offscreen for the
+               update, then restore so future events still hit the
+               window. */
+            GrafPtr origInPort = (**doc->te).inPort;
+            (**doc->te).inPort = &gOffscreen.port;
+            TEUpdate(&drawRect, doc->te);
+            (**doc->te).inPort = origInPort;
+            OffscreenCopyAndEnd(doc->window, &drawRect);
+        } else {
+            /* No memory for offscreen -- fall back to direct draw. */
+            EraseRect(&drawRect);
+            TEUpdate(&drawRect, doc->te);
+        }
     }
 
     SetPort(savedPort);
