@@ -199,13 +199,68 @@ resource 'DITL' (130, "New Folder") {
         Button { enabled, "Cancel" };
 
         { 12, 12, 32, 288 },
-        StaticText { disabled, "Folder name:" };
+        StaticText { disabled, "New folder:" };
 
         { 40, 12, 60, 288 },
         EditText { enabled, "Untitled folder" };
 
         { 80, 216, 108, 284 },
         UserItem { disabled };
+    }
+};
+
+/* ---- Permanent-delete confirmation (browser toolbar trash button) ----
+
+   ParamText sets ^0 to the entry name and ^1 to "file"/"folder". */
+
+resource 'ALRT' (131, "Delete?") {
+    { 80, 80, 200, 420 },
+    131,
+    {
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+    },
+    centerMainScreen
+};
+
+resource 'DITL' (131, "Delete?") {
+    {
+        { 80, 232, 100, 312 },
+        Button { enabled, "Delete" };
+
+        { 80, 122, 100, 202 },
+        Button { enabled, "Cancel" };
+
+        { 12, 64, 64, 308 },
+        StaticText { disabled,
+            "Permanently delete the ^1 \0xD2^0\0xD3?" };
+    }
+};
+
+/* ---- "Folder is not empty" alert (blocks permanent folder delete) ---- */
+
+resource 'ALRT' (132, "Folder Not Empty") {
+    { 80, 80, 200, 420 },
+    132,
+    {
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+    },
+    centerMainScreen
+};
+
+resource 'DITL' (132, "Folder Not Empty") {
+    {
+        { 80, 252, 100, 312 },
+        Button { enabled, "OK" };
+
+        { 12, 64, 64, 308 },
+        StaticText { disabled,
+            "The folder \0xD2^0\0xD3 isn\0xD5t empty. Remove its contents first." };
     }
 };
 

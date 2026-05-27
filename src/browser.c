@@ -14,6 +14,7 @@
 
 #include "file_io.h"
 #include "document.h"
+#include "toolbar_icons.h"
 
 #define kBrowserWindowID  131
 #define kRowHeight        14    /* Geneva 9pt line height + 2px padding so
@@ -23,23 +24,20 @@
 #define kLeftMargin       6
 #define kScrollBarWidth   15
 
-/* Top button strip. Holds the navigation buttons (".." and "Go to...");
-   later we'll swap the text titles for 16x16 icons. Buttons are 18x18
-   square (room for the 16-pixel icon + 1px frame each side), plus a
-   1px drop shadow row below them and a 1px margin before the
-   separator line. The separator sits at y = kButtonRowHeight - 1 and
-   the list starts at y = kButtonRowHeight.
+/* Top button strip. 15x15 icons inside a 1-px inner margin + 1-px frame
+   = 19x19 button.  1-px drop shadow below, 1-px margin, 1-px separator,
+   then the list.
 
    Layout:
        y=0..1   top padding (kButtonTopPad)
-       y=2..19  button frame + body
-       y=20     drop shadow row
-       y=21     margin between shadow and separator
-       y=22     separator line (kButtonRowHeight - 1)
-       y=23     list begins (kButtonRowHeight) */
-#define kButtonRowHeight  23
-#define kButtonHeight     18
-#define kButtonWidth      18
+       y=2..20  button frame + body (kButtonHeight = 19)
+       y=21     drop shadow row
+       y=22     margin between shadow and separator
+       y=23     separator line (kButtonRowHeight - 1)
+       y=24     list begins (kButtonRowHeight) */
+#define kButtonRowHeight  24
+#define kButtonHeight     19
+#define kButtonWidth      19
 #define kButtonTopPad      2
 #define kButtonGap         3
 
@@ -83,6 +81,7 @@ static ControlHandle gScrollBar = NULL;
 static Rect gParentBtnR;   /* ".." -> go to parent */
 static Rect gGoBtnR;       /* "go" -> Go to... dialog */
 static Rect gNewBtnR;      /* "+"  -> new folder in current dir */
+static Rect gDelBtnR;      /* "-"  -> delete selected entry */
 
 static long      gLastClickTime = 0;
 static short     gLastClickRow  = -1;
@@ -142,11 +141,15 @@ static void OffscreenCopyAndEnd(GrafPtr dest, const Rect *r)
 /* ---- forward decls ---- */
 static Boolean BrowserPickFolder(short *outVRef, long *outDirID);
 static void    BrowserCreateNewFolder(void);
+static void    BrowserDeleteSelected(void);
+static void    BrowserDrawButtonIcon(const Rect *r,
+                                     const unsigned short *iconBits,
+                                     Boolean pressed);
 static void    BrowserComputeButtonRects(void);
-static void    BrowserDrawButton(const Rect *r, ConstStr255Param title, Boolean pressed);
+static void    BrowserDrawButton(const Rect *r, const unsigned short *iconBits, Boolean pressed);
 static void    BrowserDrawButtons(void);
 static void    BrowserDrawChrome(void);
-static Boolean BrowserTrackButton(const Rect *r, ConstStr255Param title);
+static Boolean BrowserTrackButton(const Rect *r, const unsigned short *iconBits);
 static void    BrowserLoadCurrent(void);
 static void    BrowserDrawList(void);
 static void    BrowserUpdateTitle(void);
@@ -192,14 +195,47 @@ static void BrowserComputeButtonRects(void)
     gNewBtnR.bottom = kButtonTopPad + kButtonHeight;
     gNewBtnR.left   = x;
     gNewBtnR.right  = x + kButtonWidth;
+    x = gNewBtnR.right + kButtonGap;
+    gDelBtnR.top    = kButtonTopPad;
+    gDelBtnR.bottom = kButtonTopPad + kButtonHeight;
+    gDelBtnR.left   = x;
+    gDelBtnR.right  = x + kButtonWidth;
 }
 
-static void BrowserDrawButton(const Rect *r, ConstStr255Param title, Boolean pressed)
+/* CopyBits a kToolbarIconSize-square 1-bit bitmap centered inside `r`.
+   Use srcOr when the button is unpressed (icon's 1-bits become black on
+   the white interior) and srcBic when pressed (icon's 1-bits clear the
+   black interior to white, giving a proper inverted look). */
+static void BrowserDrawButtonIcon(const Rect *r,
+                                  const unsigned short *iconBits,
+                                  Boolean pressed)
 {
-    FontInfo fi;
-    short labelWidth;
-    short tx, ty;
+    BitMap bm;
+    Rect srcR, dstR;
+    GrafPtr port;
+    short cw = r->right - r->left;
+    short ch = r->bottom - r->top;
 
+    srcR.left = 0;  srcR.top = 0;
+    srcR.right = kToolbarIconSize;  srcR.bottom = kToolbarIconSize;
+
+    dstR.left = r->left + (cw - kToolbarIconSize) / 2;
+    dstR.top  = r->top  + (ch - kToolbarIconSize) / 2;
+    dstR.right  = dstR.left + kToolbarIconSize;
+    dstR.bottom = dstR.top  + kToolbarIconSize;
+
+    bm.baseAddr = (Ptr)iconBits;
+    bm.rowBytes = kToolbarIconRowBytes;
+    bm.bounds   = srcR;
+
+    GetPort(&port);
+    CopyBits(&bm, &port->portBits, &srcR, &dstR,
+             pressed ? srcBic : srcOr, NULL);
+}
+
+static void BrowserDrawButton(const Rect *r, const unsigned short *iconBits,
+                              Boolean pressed)
+{
     EraseRect(r);
     FrameRect(r);
 
@@ -211,26 +247,13 @@ static void BrowserDrawButton(const Rect *r, ConstStr255Param title, Boolean pre
     MoveTo(r->right,    r->top + 1);
     LineTo(r->right,    r->bottom);
 
-    TextFont(3);     /* Geneva */
-    TextSize(9);
-    TextFace(0);
-
     if (pressed) {
         Rect inner = *r;
         InsetRect(&inner, 1, 1);
         PaintRect(&inner);
-        TextMode(srcXor);
-    } else {
-        TextMode(srcOr);
     }
 
-    GetFontInfo(&fi);
-    labelWidth = StringWidth(title);
-    tx = r->left + (r->right - r->left - labelWidth) / 2;
-    ty = r->bottom - (r->bottom - r->top - fi.ascent + 1) / 2;
-    MoveTo(tx, ty);
-    DrawString(title);
-    TextMode(srcCopy);
+    if (iconBits) BrowserDrawButtonIcon(r, iconBits, pressed);
 }
 
 static void BrowserDrawButtons(void)
@@ -244,9 +267,10 @@ static void BrowserDrawButtons(void)
     strip.right  = gWindow->portRect.right;
     strip.bottom = kButtonRowHeight - 1;
     EraseRect(&strip);
-    BrowserDrawButton(&gParentBtnR, "\p..", false);
-    BrowserDrawButton(&gGoBtnR,     "\pgo", false);
-    BrowserDrawButton(&gNewBtnR,    "\p+",  false);
+    BrowserDrawButton(&gParentBtnR, kIcon_folder_up_15px,   false);
+    BrowserDrawButton(&gGoBtnR,     kIcon_folder_open_15px, false);
+    BrowserDrawButton(&gNewBtnR,    kIcon_folder_new_15px,  false);
+    BrowserDrawButton(&gDelBtnR,    kIcon_trash_15px,       false);
 }
 
 static void BrowserDrawChrome(void)
@@ -262,21 +286,21 @@ static void BrowserDrawChrome(void)
     LineTo(gWindow->portRect.right, kButtonRowHeight - 1);
 }
 
-static Boolean BrowserTrackButton(const Rect *r, ConstStr255Param title)
+static Boolean BrowserTrackButton(const Rect *r, const unsigned short *iconBits)
 {
     Point pt;
     Boolean inside = true;
     Boolean lastInside = true;
-    BrowserDrawButton(r, title, true);
+    BrowserDrawButton(r, iconBits, true);
     while (StillDown()) {
         GetMouse(&pt);
         inside = PtInRect(pt, r);
         if (inside != lastInside) {
-            BrowserDrawButton(r, title, inside);
+            BrowserDrawButton(r, iconBits, inside);
             lastInside = inside;
         }
     }
-    BrowserDrawButton(r, title, false);
+    BrowserDrawButton(r, iconBits, false);
     return inside;
 }
 
@@ -554,6 +578,75 @@ static void BrowserCreateNewFolder(void)
         return;
     }
 
+    BrowserLoadCurrent();
+    BrowserDrawList();
+}
+
+/* ---- Permanently delete selected entry ----
+
+   No Trash semantics: HDelete removes the catalog entry outright. We
+   refuse non-empty folders up front so the user gets a clear error
+   instead of an opaque ioErr. Always confirms. */
+
+static Boolean FolderIsEmpty(short vRef, long dirID)
+{
+    CInfoPBRec pb;
+    Str63 nm;
+    OSErr err;
+    nm[0] = 0;
+    pb.hFileInfo.ioCompletion = NULL;
+    pb.hFileInfo.ioNamePtr    = (StringPtr)nm;
+    pb.hFileInfo.ioVRefNum    = vRef;
+    pb.hFileInfo.ioFVersNum   = 0;
+    pb.hFileInfo.ioFDirIndex  = 1;     /* first entry in dir */
+    pb.hFileInfo.ioDirID      = dirID;
+    err = PBGetCatInfoSync(&pb);
+    return (err != noErr);             /* fnfErr / dir-end → empty */
+}
+
+static void BrowserDeleteSelected(void)
+{
+    BrowserEntry *entries;
+    Str63 name;
+    Boolean isFolder;
+    long  targetDir;
+    Str255 typeLabel;
+    short hit;
+    OSErr err;
+
+    if (gSelectedIdx < 0 || gSelectedIdx >= gNumEntries) {
+        SysBeep(1);
+        return;
+    }
+    HLock(gEntries);
+    entries = BrowserEntries();
+    StrCopy(name, entries[gSelectedIdx].name);
+    isFolder  = entries[gSelectedIdx].isFolder;
+    targetDir = entries[gSelectedIdx].dirID;
+    HUnlock(gEntries);
+
+    if (isFolder && !FolderIsEmpty(gFolderVRef, targetDir)) {
+        ParamText(name, "\p", "\p", "\p");
+        (void)StopAlert(132, NULL);
+        return;
+    }
+
+    {
+        const unsigned char *folderLbl = (const unsigned char *)"\pfolder";
+        const unsigned char *fileLbl   = (const unsigned char *)"\pfile";
+        StrCopy(typeLabel, isFolder ? folderLbl : fileLbl);
+    }
+    ParamText(name, typeLabel, "\p", "\p");
+    hit = CautionAlert(131, NULL);
+    if (hit != 1) return;
+
+    err = HDelete(gFolderVRef, gFolderID, name);
+    if (err != noErr) {
+        SysBeep(1);
+        return;
+    }
+
+    gSelectedIdx = -1;
     BrowserLoadCurrent();
     BrowserDrawList();
 }
@@ -902,14 +995,14 @@ void BrowserClick(EventRecord *ev)
 
     /* Custom buttons: simple PtInRect + tracking loop. */
     if (PtInRect(local, &gParentBtnR)) {
-        if (BrowserTrackButton(&gParentBtnR, "\p..")) {
+        if (BrowserTrackButton(&gParentBtnR, kIcon_folder_up_15px)) {
             if (gParentDirID > 0) BrowserNavigateTo(gFolderVRef, gParentDirID);
         }
         SetPort(savedPort);
         return;
     }
     if (PtInRect(local, &gGoBtnR)) {
-        if (BrowserTrackButton(&gGoBtnR, "\pgo")) {
+        if (BrowserTrackButton(&gGoBtnR, kIcon_folder_open_15px)) {
             short newVRef;
             long  newDirID;
             if (BrowserPickFolder(&newVRef, &newDirID)) {
@@ -920,8 +1013,15 @@ void BrowserClick(EventRecord *ev)
         return;
     }
     if (PtInRect(local, &gNewBtnR)) {
-        if (BrowserTrackButton(&gNewBtnR, "\p+")) {
+        if (BrowserTrackButton(&gNewBtnR, kIcon_folder_new_15px)) {
             BrowserCreateNewFolder();
+        }
+        SetPort(savedPort);
+        return;
+    }
+    if (PtInRect(local, &gDelBtnR)) {
+        if (BrowserTrackButton(&gDelBtnR, kIcon_trash_15px)) {
+            BrowserDeleteSelected();
         }
         SetPort(savedPort);
         return;

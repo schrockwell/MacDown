@@ -1,6 +1,28 @@
 cmake_minimum_required(VERSION 3.9)
 project(MacDown C)
 
+# Regenerate src/toolbar_icons.h whenever an assets/icons PNG changes.
+# The header holds 15x15 1-bit QuickDraw bitmaps for the browser
+# toolbar buttons; browser.c #includes it directly.
+set(_TOOLBAR_PNGS
+    ${CMAKE_SOURCE_DIR}/assets/icons/folder-up-15px.png
+    ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-15px.png
+    ${CMAKE_SOURCE_DIR}/assets/icons/folder-new-15px.png
+    ${CMAKE_SOURCE_DIR}/assets/icons/trash-15px.png)
+add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/toolbar_icons.h
+    COMMAND python3
+        ${CMAKE_SOURCE_DIR}/scripts/png-to-toolbar-icons.py
+        ${CMAKE_SOURCE_DIR}/src/toolbar_icons.h
+        ${_TOOLBAR_PNGS}
+    DEPENDS
+        ${CMAKE_SOURCE_DIR}/scripts/png-to-toolbar-icons.py
+        ${_TOOLBAR_PNGS}
+    COMMENT "Generating src/toolbar_icons.h from assets/icons/*.png"
+    VERBATIM
+)
+add_custom_target(toolbar_icons DEPENDS ${CMAKE_SOURCE_DIR}/src/toolbar_icons.h)
+
 add_application(MacDown
     src/main.c
     src/document.c
@@ -11,6 +33,7 @@ add_application(MacDown
     resources/MacDown.r
     CREATOR MDED
 )
+add_dependencies(MacDown toolbar_icons)
 
 # Retro68's add_application macro hardcodes the .APPL extension on the
 # data-fork output. Mac apps don't have extensions, so rename it to
