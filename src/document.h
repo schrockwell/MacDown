@@ -70,6 +70,9 @@ void DocActivate(DocState *doc, Boolean active);
 void DocClick(DocState *doc, EventRecord *ev);
 void DocAdjustScrollbar(DocState *doc);
 
+/* Menu state — enable/disable doc-dependent items. */
+void SyncFileMenuEnables(void);
+
 /* Selection / dirty tracking. */
 void DocMarkDirty(DocState *doc);
 void DocMarkLineDirty(DocState *doc, short pos);

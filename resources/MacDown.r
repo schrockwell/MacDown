@@ -40,6 +40,7 @@ resource 'MENU' (129, "File") {
         "New",                    noIcon, "N",    noMark, plain;
         "Open\0xC9",              noIcon, "O",    noMark, plain;
         "Close",                  noIcon, "W",    noMark, plain;
+        "Close All",              noIcon, noKey,  noMark, plain;
         "Save",                   noIcon, "S",    noMark, plain;
         "Save As\0xC9",           noIcon, noKey,  noMark, plain;
         "-",                      noIcon, noKey,  noMark, plain;
@@ -139,6 +140,31 @@ resource 'WIND' (131, "Browser") {
     0x0,
     "Browser",
     noAutoCenter
+};
+
+/* ---- Generic error alert ---- Used by ShowError() in document.c.
+   ParamText sets ^0 to the message from STR# 128. */
+
+resource 'ALRT' (128, "Error") {
+    { 80, 80, 190, 420 },
+    128,
+    {
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+    },
+    centerMainScreen
+};
+
+resource 'DITL' (128, "Error") {
+    {
+        { 72, 262, 92, 322 },
+        Button { enabled, "OK" };
+
+        { 12, 64, 64, 322 },
+        StaticText { disabled, "^0" };
+    }
 };
 
 /* ---- Save changes? prompt ---- */
@@ -273,6 +299,7 @@ resource 'STR#' (128, "Errors") {
         "Some characters were converted to MacRoman.";
         "Couldn\0xD5t save the file.";
         "Couldn\0xD5t create the file.";
+        "Too many documents open. Close one and try again.";
     }
 };
 

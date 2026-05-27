@@ -35,9 +35,10 @@
 #define kFileNew      1
 #define kFileOpen     2
 #define kFileClose    3
-#define kFileSave     4
-#define kFileSaveAs   5
-#define kFileQuit     7
+#define kFileCloseAll 4
+#define kFileSave     5
+#define kFileSaveAs   6
+#define kFileQuit     8
 
 #define kEditUndo      1
 #define kEditCut       3
@@ -95,6 +96,7 @@ static void OpenFromFinderLaunch(void);
 static void HandleMouse(EventRecord *ev);
 static void HandleKey(EventRecord *ev);
 static void HandleMenu(long mResult);
+static void AdjustMenus(void);
 static void DoAbout(void);
 static Boolean HandleReturnKey(DocState *doc);
 static void DoToggleTask(DocState *doc);
@@ -154,6 +156,7 @@ static void HandleMouse(EventRecord *ev)
 
     switch (part) {
         case inMenuBar:
+            AdjustMenus();
             HandleMenu(MenuSelect(ev->where));
             break;
         case inSysWindow:
@@ -330,12 +333,12 @@ static void HandleKey(EventRecord *ev)
         return;
     }
 
-    /* Menu commands always work even with no doc (e.g. Cmd-N, Cmd-O, Cmd-Q). */
-    if (cmd && (doc == NULL || c == 'n' || c == 'N' ||
-                c == 'o' || c == 'O' || c == 'q' || c == 'Q')) {
-        long mr = MenuKey(c);
-        if (HiWord(mr) != 0) HandleMenu(mr);
-        return;
+    if (cmd) {
+        AdjustMenus();
+        {
+            long mr = MenuKey(c);
+            if (HiWord(mr) != 0) { HandleMenu(mr); return; }
+        }
     }
 
     if (doc == NULL) return;
@@ -814,6 +817,11 @@ static void HandleQuit(void)
     if (DocCloseAll()) gQuitRequested = true;
 }
 
+static void AdjustMenus(void)
+{
+    SyncFileMenuEnables();
+}
+
 static void HandleMenu(long mResult)
 {
     short menuID = HiWord(mResult);
@@ -837,10 +845,11 @@ static void HandleMenu(long mResult)
             switch (item) {
                 case kFileNew:    DocNew(); break;
                 case kFileOpen:   DoFileOpen(); break;
-                case kFileClose:  if (doc) DocClose(doc); break;
-                case kFileSave:   if (doc) DocSave(doc); break;
-                case kFileSaveAs: if (doc) DocSaveAs(doc); break;
-                case kFileQuit:   HandleQuit(); break;
+                case kFileClose:    if (doc) DocClose(doc); break;
+                case kFileCloseAll: DocCloseAll(); break;
+                case kFileSave:     if (doc) DocSave(doc); break;
+                case kFileSaveAs:   if (doc) DocSaveAs(doc); break;
+                case kFileQuit:     HandleQuit(); break;
             }
             break;
 
@@ -855,10 +864,15 @@ static void HandleMenu(long mResult)
                                   DocMarkLineDirty(doc, (**doc->te).selStart);
                                   break;
                 case kEditCopy:   TECopy(doc->te); break;
-                case kEditPaste:  DocBeforeAction(doc);
-                                  TEPaste(doc->te);
-                                  DocMarkDirty(doc);
-                                  DocMarkLineDirty(doc, (**doc->te).selStart);
+                case kEditPaste:  {
+                                      short pasteStart = (**doc->te).selStart;
+                                      short pasteEnd;
+                                      DocBeforeAction(doc);
+                                      TEPaste(doc->te);
+                                      pasteEnd = (**doc->te).selStart;
+                                      DocMarkDirty(doc);
+                                      ForceRestyleRangeFor(doc, pasteStart, pasteEnd);
+                                  }
                                   break;
                 case kEditClear:  DocBeforeAction(doc);
                                   TEDelete(doc->te);

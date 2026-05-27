@@ -26,13 +26,17 @@
 #define kErrFolded 3
 #define kErrCantSave 4
 #define kErrCantCreate 5
+#define kErrTooManyDocs 6
+
+#define kMaxOpenDocs 8
 
 #define kUndoMenuID 130
 #define kUndoMenuItem 1
 #define kFileMenuID 129
-#define kFileMenuClose 3
-#define kFileMenuSave 4
-#define kFileMenuSaveAs 5
+#define kFileMenuClose    3
+#define kFileMenuCloseAll 4
+#define kFileMenuSave     5
+#define kFileMenuSaveAs   6
 #define kWindowsMenuID 132
 #define kWindowsMenuStaticItems 3 /* Next, Browser, separator */
 
@@ -43,7 +47,7 @@ static pascal void ScrollAction(ControlHandle ctl, short part);
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR);
 static void ShowError(short stringIndex);
 static void SetUndoMenuEnabled(Boolean on);
-static void SyncFileMenuEnables(void);
+void SyncFileMenuEnables(void);
 static void YieldOnce(void);
 static void ClearDocText(DocState *doc);
 static DocState *FindEmptyUntitledDoc(void);
@@ -148,7 +152,7 @@ static void SetUndoMenuEnabled(Boolean on)
 
 /* Close / Save / Save As require an active document; grey them out
    when there are none open so Cmd-W / Cmd-S also no-op. */
-static void SyncFileMenuEnables(void)
+void SyncFileMenuEnables(void)
 {
     MenuHandle m = GetMenuHandle(kFileMenuID);
     Boolean haveDoc;
@@ -167,6 +171,10 @@ static void SyncFileMenuEnables(void)
         DisableItem(m, kFileMenuSave);
         DisableItem(m, kFileMenuSaveAs);
     }
+    if (gDocs != NULL)
+        EnableItem(m, kFileMenuCloseAll);
+    else
+        DisableItem(m, kFileMenuCloseAll);
 }
 
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
@@ -267,6 +275,15 @@ DocState *DocNew(void)
     WindowPtr w;
     Rect destR, viewR;
     Rect ctlR;
+    short count;
+
+    /* Count open docs and refuse if at the limit. */
+    count = 0;
+    for (doc = gDocs; doc != NULL; doc = doc->next) count++;
+    if (count >= kMaxOpenDocs) {
+        ShowError(kErrTooManyDocs);
+        return NULL;
+    }
 
     doc = (DocState *)NewPtrClear(sizeof(DocState));
     if (doc == NULL)
