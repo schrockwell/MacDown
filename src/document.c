@@ -275,31 +275,21 @@ DocState *DocNew(void)
     doc->dirtyLineStart = -1;
     doc->dirtyLineEnd = -1;
 
-    /* Stagger from the front window's global position (if any). We
-       must compute the offset BEFORE GetNewWindow so we know where
-       the previous front window actually is. */
+    /* Cascade: each new window steps 20px down and right from a fixed
+       origin just below the menu bar. A static counter wraps when the
+       next position would push the window off-screen, giving a clean
+       diagonal pattern that doesn't depend on where the user has
+       dragged existing windows. */
     {
-        WindowPtr prev = FrontWindow();
-        Point staggerTo;
-        Boolean haveStagger = false;
-        if (prev != NULL)
-        {
-            GrafPtr savedPort;
-            GetPort(&savedPort);
-            SetPort(prev);
-            staggerTo.h = 0;
-            staggerTo.v = 0;
-            LocalToGlobal(&staggerTo); /* now global TL of prev's content */
-            SetPort(savedPort);
-            staggerTo.h += 20;
-            staggerTo.v += 20;
-            /* Wrap if we'd go off-screen */
-            if (staggerTo.h > qd.screenBits.bounds.right - 120)
-                staggerTo.h = 20;
-            if (staggerTo.v > qd.screenBits.bounds.bottom - 120)
-                staggerTo.v = GetMBarHeight() + 20;
-            haveStagger = true;
-        }
+        static short sCascade = 0;
+        short baseH = 20;
+        short baseV = GetMBarHeight() + 20;
+        short step  = 20;
+        short posH, posV;
+
+        posH = baseH + sCascade * step;
+        posV = baseV + sCascade * step;
+        sCascade = (sCascade + 1) % 5;
 
         w = GetNewWindow(kWindowID, NULL, (WindowPtr)-1L);
         if (w == NULL)
@@ -307,8 +297,7 @@ DocState *DocNew(void)
             DisposePtr((Ptr)doc);
             return NULL;
         }
-        if (haveStagger)
-            MoveWindow(w, staggerTo.h, staggerTo.v, false);
+        MoveWindow(w, posH, posV, false);
     }
 
     SetPort(w);

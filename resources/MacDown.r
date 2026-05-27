@@ -10,7 +10,7 @@
 resource 'WIND' (128, "MacDown") {
     { 80, 56, 270, 456 },    /* 400x190 — small enough to leave room, top=80 */
     zoomDocProc,
-    visible,
+    invisible,
     goAway,
     0x0,
     "untitled",
