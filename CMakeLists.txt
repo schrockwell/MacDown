@@ -55,6 +55,15 @@ if(SETFILE_EXECUTABLE)
         COMMENT "Tagging MacDown.bin as type=BINA creator=????"
         VERBATIM
     )
+    # Belt-and-suspenders: set type/creator AND the bundle bit
+    # explicitly on the renamed APPL file too. The 'has bundle' bit
+    # is what tells the Finder to read this file's BNDL/ICN# chain
+    # on desktop rebuild; without it, custom icons never appear.
+    add_custom_command(TARGET MacDown_APPL POST_BUILD
+        COMMAND ${SETFILE_EXECUTABLE} -t APPL -c MDED -a B ${CMAKE_BINARY_DIR}/MacDown
+        COMMENT "Setting bundle bit + type/creator on MacDown"
+        VERBATIM
+    )
 endif()
 
 # Real-Mac disk mounters (MountImage, Disk Copy 4.2, ShrinkWrap) expect
