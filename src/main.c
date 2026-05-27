@@ -19,12 +19,13 @@
 #include "markdown.h"
 #include "apple_events.h"
 
-#define kMenuBarID    128
-#define kAppleMenuID  128
-#define kFileMenuID   129
-#define kEditMenuID   130
-#define kFormatMenuID 131
+#define kMenuBarID     128
+#define kAppleMenuID   128
+#define kFileMenuID    129
+#define kEditMenuID    130
+#define kFormatMenuID  131
 #define kWindowsMenuID 132
+#define kLineMenuID    133
 
 #define kWindowsMenuNext 1
 #define kWindowsMenuStaticItems 2
@@ -36,29 +37,30 @@
 #define kFileSaveAs   5
 #define kFileQuit     7
 
-#define kEditUndo     1
-#define kEditCut      3
-#define kEditCopy     4
-#define kEditPaste    5
-#define kEditClear    6
-#define kEditSelAll   7
+#define kEditUndo      1
+#define kEditCut       3
+#define kEditCopy      4
+#define kEditPaste     5
+#define kEditClear     6
+#define kEditSelAll    7
+#define kEditDuplicate 9
 
 #define kFormatBold       1
 #define kFormatItalic     2
 #define kFormatCode       3
-#define kFormatH1         5
-#define kFormatH2         6
-#define kFormatH3         7
-#define kFormatH4         8
-#define kFormatH5         9
-#define kFormatH6         10
-#define kFormatNoHeading  11
-#define kFormatInsertLink 13
-#define kFormatToggleTask 15
-#define kFormatDuplicate  16
-#define kFormatIndent     18
-#define kFormatOutdent    19
-#define kFormatRestyleAll 21
+#define kFormatInsertLink 5
+
+#define kLineH1          1
+#define kLineH2          2
+#define kLineH3          3
+#define kLineH4          4
+#define kLineH5          5
+#define kLineH6          6
+#define kLineNoHeading   7
+#define kLineToggleTask  9
+#define kLineBlockquote  10
+#define kLineIndent      12
+#define kLineOutdent     13
 
 #define kAboutItem      1
 #define kShortcutsItem  2
@@ -794,9 +796,10 @@ static void HandleMenu(long mResult)
                                   DocMarkDirty(doc);
                                   DocMarkLineDirty(doc, (**doc->te).selStart);
                                   break;
-                case kEditSelAll: DocBreakTypingRun(doc);
-                                  TESetSelect(0, 32767, doc->te);
-                                  break;
+                case kEditSelAll:    DocBreakTypingRun(doc);
+                                     TESetSelect(0, 32767, doc->te);
+                                     break;
+                case kEditDuplicate: DocDuplicateLine(doc); break;
             }
             if (doc) DocAdjustScrollbar(doc);
             break;
@@ -807,21 +810,24 @@ static void HandleMenu(long mResult)
                 case kFormatBold:       DocWrapPair(doc, '*', 2); break;
                 case kFormatItalic:     DocWrapPair(doc, '*', 1); break;
                 case kFormatCode:       DocWrapPair(doc, '`', 1); break;
-                case kFormatH1:         DocToggleHeading(doc, 1); break;
-                case kFormatH2:         DocToggleHeading(doc, 2); break;
-                case kFormatH3:         DocToggleHeading(doc, 3); break;
-                case kFormatH4:         DocToggleHeading(doc, 4); break;
-                case kFormatH5:         DocToggleHeading(doc, 5); break;
-                case kFormatH6:         DocToggleHeading(doc, 6); break;
-                case kFormatNoHeading:  DocToggleHeading(doc, 0); break;
                 case kFormatInsertLink: DoInsertLink(doc); break;
-                case kFormatToggleTask: DoToggleTask(doc); break;
-                case kFormatDuplicate:  DocDuplicateLine(doc); break;
-                case kFormatIndent:     DocIndentLine(doc); break;
-                case kFormatOutdent:    DocOutdentLine(doc); break;
-                case kFormatRestyleAll: MdRestyleAll(doc->te);
-                                        InvalRect(&doc->window->portRect);
-                                        break;
+            }
+            break;
+
+        case kLineMenuID:
+            if (doc == NULL) break;
+            switch (item) {
+                case kLineH1:         DocToggleHeading(doc, 1); break;
+                case kLineH2:         DocToggleHeading(doc, 2); break;
+                case kLineH3:         DocToggleHeading(doc, 3); break;
+                case kLineH4:         DocToggleHeading(doc, 4); break;
+                case kLineH5:         DocToggleHeading(doc, 5); break;
+                case kLineH6:         DocToggleHeading(doc, 6); break;
+                case kLineNoHeading:  DocToggleHeading(doc, 0); break;
+                case kLineToggleTask: DoToggleTask(doc); break;
+                case kLineBlockquote: DocToggleBlockquote(doc); break;
+                case kLineIndent:     DocIndentLine(doc); break;
+                case kLineOutdent:    DocOutdentLine(doc); break;
             }
             break;
 

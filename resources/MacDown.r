@@ -20,7 +20,7 @@ resource 'WIND' (128, "MacDown") {
 /* ---- Menu bar ---- */
 
 resource 'MBAR' (128) {
-    { 128, 129, 130, 131, 132 }
+    { 128, 129, 130, 131, 133, 132 }
 };
 
 resource 'MENU' (128, "Apple") {
@@ -58,6 +58,8 @@ resource 'MENU' (130, "Edit") {
         "Paste",                      noIcon, "V",    noMark, plain;
         "Clear",                      noIcon, noKey,  noMark, plain;
         "Select All",                 noIcon, "A",    noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
+        "Duplicate Line",             noIcon, "D",    noMark, plain;
     }
 };
 
@@ -69,6 +71,14 @@ resource 'MENU' (131, "Format") {
         "Italic",                     noIcon, "I",    noMark, plain;
         "Code",                       noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
+        "Link",                       noIcon, "K",    noMark, plain;
+    }
+};
+
+resource 'MENU' (133, "Line") {
+    133, textMenuProc, allEnabled, enabled,
+    "Line",
+    {
         "Heading 1",                  noIcon, "1",    noMark, plain;
         "Heading 2",                  noIcon, "2",    noMark, plain;
         "Heading 3",                  noIcon, "3",    noMark, plain;
@@ -77,21 +87,17 @@ resource 'MENU' (131, "Format") {
         "Heading 6",                  noIcon, "6",    noMark, plain;
         "No Heading",                 noIcon, "0",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
-        "Insert Link",                noIcon, "K",    noMark, plain;
-        "-",                          noIcon, noKey,  noMark, plain;
-        "Toggle Task",                noIcon, "L",    noMark, plain;
-        "Duplicate Line",             noIcon, "D",    noMark, plain;
+        "Task",                       noIcon, "L",    noMark, plain;
+        "Blockquote",                 noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Indent",                     noIcon, "]",    noMark, plain;
         "Outdent",                    noIcon, "[",    noMark, plain;
-        "-",                          noIcon, noKey,  noMark, plain;
-        "Re-style Document",          noIcon, noKey,  noMark, plain;
     }
 };
 
-resource 'MENU' (132, "Windows") {
+resource 'MENU' (132, "Window") {
     132, textMenuProc, allEnabled, enabled,
-    "Windows",
+    "Window",
     {
         "Next Window (Cmd-`)",        noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;

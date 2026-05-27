@@ -15,7 +15,8 @@ typedef enum
    kLine_UnorderedItem,
    kLine_OrderedItem,
    kLine_TaskUnchecked,
-   kLine_TaskChecked
+   kLine_TaskChecked,
+   kLine_Blockquote
 } MdLineKind;
 
 /* Classify a line given a pointer to its first byte and its length

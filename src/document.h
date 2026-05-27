@@ -86,6 +86,12 @@ void DocToggleHeading(DocState *doc, short level);
    inserts the pair and parks the caret between. */
 void DocWrapPair(DocState *doc, char ch, short n);
 
+/* Toggle "> " on every line that intersects the selection (or the
+   current line if there's no selection). Direction is determined by
+   the first line: if it's already a blockquote, the prefix is
+   removed from each line; otherwise the prefix is added. */
+void DocToggleBlockquote(DocState *doc);
+
 /* Cursor helpers. */
 short DocOffsetLeft(DocState *doc, short pos);
 short DocOffsetRight(DocState *doc, short pos);

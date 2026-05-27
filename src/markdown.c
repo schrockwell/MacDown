@@ -33,6 +33,11 @@ MdLineKind MdClassifyLine(const char *line, short len)
         }
     }
 
+    /* Blockquote: '>' optionally followed by a space and content. */
+    if (i < len && line[i] == '>') {
+        return kLine_Blockquote;
+    }
+
     /* List markers: '-', '*', '+' followed by space. */
     if (i + 1 < len &&
         (line[i] == '-' || line[i] == '*' || line[i] == '+') &&
@@ -110,49 +115,6 @@ static void ApplyFace(TEHandle te, short start, short end, short face)
     ts.tsColor.red = ts.tsColor.green = ts.tsColor.blue = 0;
     TESetSelect(start, end, te);
     TESetStyle(doFace, &ts, false, te);
-}
-
-/* Code span: switch to Monaco (the only monospace font universally
-   present on classic Mac); keep the surrounding face/size so the run
-   inherits the current line's height. The backticks themselves stay
-   in the normal font so they remain visually distinct. */
-static void ApplyCode(TEHandle te, short start, short end)
-{
-    TextStyle ts;
-    ts.tsFont  = 4;        /* Monaco */
-    ts.tsFace  = 0;
-    ts.tsSize  = 0;
-    ts.tsColor.red = ts.tsColor.green = ts.tsColor.blue = 0;
-    TESetSelect(start, end, te);
-    TESetStyle(doFont, &ts, false, te);
-}
-
-/* Scan for backtick code spans: `code`. Simpler rule than emphasis --
-   matched pair, content not whitespace, no flanking constraints. */
-static void StyleInlineCode(TEHandle te,
-                            const char *text, short lineStart, short lineLen)
-{
-    short i = 0;
-    while (i < lineLen) {
-        short opener, closer, contentStart;
-        if (text[i] != '`') { i++; continue; }
-        opener = i;
-        contentStart = i + 1;
-        if (contentStart >= lineLen) break;
-        if (text[contentStart] == ' ' || text[contentStart] == '\t') {
-            i++; continue;
-        }
-        closer = -1;
-        {
-            short j;
-            for (j = contentStart; j < lineLen; j++) {
-                if (text[j] == '`') { closer = j; break; }
-            }
-        }
-        if (closer < 0) break;
-        ApplyCode(te, lineStart + contentStart, lineStart + closer);
-        i = closer + 1;
-    }
 }
 
 /* Scan one line for *...*, **...**, _..._, __...__ runs and bold their
@@ -238,10 +200,10 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
     lineLen = lineEnd - lineStart;
     if (lineLen < 0) lineLen = 0;
 
-    /* Reset the whole line to plain Geneva 12 first so previous styling
-       doesn't leak. */
-    base.tsFont = 0;          /* keep TE default font (Geneva) */
-    base.tsFace = 0;          /* plain */
+    /* Reset the whole line to plain size 12 first so previous styling
+       doesn't leak. Font is left alone -- we don't restyle by font. */
+    base.tsFont = 0;
+    base.tsFace = 0;
     base.tsSize = 12;
     base.tsColor.red = base.tsColor.green = base.tsColor.blue = 0;
 
@@ -279,7 +241,6 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
     /* Inline emphasis scan. */
     StyleInlineEmphasis(te, text, lineStart, lineLen);
-    StyleInlineCode(te, text, lineStart, lineLen);
 
     HUnlock((Handle)ch);
 
@@ -393,6 +354,21 @@ Boolean MdNextListMarker(TEHandle te, short pos,
                 outMarker[1 + k] = '.';
                 outMarker[2 + k] = ' ';
             }
+            result = true;
+            break;
+        }
+
+        case kLine_Blockquote: {
+            /* Skip the '>' and an optional space; the rest is content. */
+            short j = i;
+            if (j < len && text[j] == '>') {
+                j++;
+                if (j < len && text[j] == ' ') j++;
+            }
+            contentStart = j;
+            outMarker[0] = 2;
+            outMarker[1] = '>';
+            outMarker[2] = ' ';
             result = true;
             break;
         }

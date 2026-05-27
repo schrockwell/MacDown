@@ -1848,6 +1848,123 @@ static void IndentRange(DocState *doc, Boolean indent)
 void DocIndentLine(DocState *doc) { IndentRange(doc, true); }
 void DocOutdentLine(DocState *doc) { IndentRange(doc, false); }
 
+/* ---- Toggle blockquote ---- */
+
+void DocToggleBlockquote(DocState *doc)
+{
+    short selStart, selEnd;
+    Boolean isSelection;
+    short firstLs, firstLe, lastLs, lastLe;
+    short firstLineStart, lastLineEnd;
+    short endProbe;
+    short pos;
+    short totalDelta = 0;
+    short newStart, newEnd;
+    Boolean addQuote;
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+
+    DocBeforeAction(doc);
+    selStart = (**doc->te).selStart;
+    selEnd   = (**doc->te).selEnd;
+    isSelection = (selStart != selEnd);
+
+    MdFindLineBounds(doc->te, selStart, &firstLs, &firstLe);
+    endProbe = isSelection ? ((selEnd > selStart) ? selEnd - 1 : selEnd) : selStart;
+    MdFindLineBounds(doc->te, endProbe, &lastLs, &lastLe);
+
+    firstLineStart = firstLs;
+    lastLineEnd    = lastLe;
+
+    /* Direction follows the FIRST line: blockquote -> strip from all,
+       non-quote -> add to all. Makes the result uniform across a
+       mixed selection. */
+    {
+        CharsHandle ch = TEGetText(doc->te);
+        Boolean firstIsQuote = false;
+        short i;
+        HLock((Handle)ch);
+        i = firstLs;
+        while (i < firstLe && i < firstLs + 3 && (*ch)[i] == ' ') i++;
+        if (i < firstLe && (*ch)[i] == '>') firstIsQuote = true;
+        HUnlock((Handle)ch);
+        addQuote = !firstIsQuote;
+    }
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn  = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    /* Walk lines back to front so earlier line positions stay valid. */
+    pos = lastLs;
+    for (;;) {
+        if (addQuote) {
+            TESetSelect(pos, pos, doc->te);
+            TEInsert("> ", 2, doc->te);
+            totalDelta += 2;
+        } else {
+            CharsHandle ch = TEGetText(doc->te);
+            short i, removeStart, removeLen;
+            short ls, le;
+            MdFindLineBounds(doc->te, pos, &ls, &le);
+            HLock((Handle)ch);
+            i = pos;
+            while (i < le && i < pos + 3 && (*ch)[i] == ' ') i++;
+            removeStart = i;
+            removeLen = 0;
+            if (i < le && (*ch)[i] == '>') {
+                removeLen = 1;
+                i++;
+                if (i < le && (*ch)[i] == ' ') removeLen++;
+            }
+            HUnlock((Handle)ch);
+            if (removeLen > 0) {
+                TESetSelect(removeStart, removeStart + removeLen, doc->te);
+                TEDelete(doc->te);
+                totalDelta -= removeLen;
+            }
+        }
+
+        if (pos == firstLineStart) break;
+        {
+            short prevLs, prevLe;
+            MdFindLineBounds(doc->te, pos - 1, &prevLs, &prevLe);
+            pos = prevLs;
+        }
+    }
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+    SetPort(savedPort);
+
+    if (isSelection) {
+        newStart = firstLineStart;
+        newEnd   = selEnd + totalDelta;
+    } else {
+        /* No selection: shift the single caret position by however
+           much we added/removed on its line. */
+        newStart = selStart + (addQuote ? 2 : totalDelta);
+        if (newStart < firstLineStart) newStart = firstLineStart;
+        newEnd = newStart;
+    }
+    if (newStart < 0)        newStart = 0;
+    if (newEnd < newStart)   newEnd   = newStart;
+
+    TESetSelect(newStart, newEnd, doc->te);
+    doc->selAnchor = newStart;
+
+    DocMarkDirty(doc);
+    doc->dirtyLineStart = firstLineStart;
+    doc->dirtyLineEnd   = lastLineEnd + totalDelta;
+    doc->lastDirtyTick  = TickCount() - 1000;
+    DocFlushRestyle(doc);
+    DocAdjustScrollbar(doc);
+}
+
 /* ---- I-beam cursor ---- */
 
 void DocAdjustCursor(void)
