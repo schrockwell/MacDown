@@ -804,7 +804,16 @@ static void DrawAboutContent(WindowPtr w)
 
     TextFace(0);
     MoveTo(24, 54);
-    DrawString("\pVersion 1.0.0");
+    /* Build a Pascal string from MACDOWN_VERSION_STR (a C literal
+       supplied by CMake) so the About box matches /VERSION. */
+    {
+        Str255 vline;
+        const char *src = "Version " MACDOWN_VERSION_STR;
+        short n = 0;
+        while (src[n] != 0 && n < 255) { vline[n + 1] = src[n]; n++; }
+        vline[0] = n;
+        DrawString(vline);
+    }
 
     MoveTo(24, 76);
     DrawString("\pBy Rockwell Schrock (@schrockwell)");

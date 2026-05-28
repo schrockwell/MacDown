@@ -5,6 +5,9 @@
 #include "Finder.r"
 #include "Types.r"
 
+/* 'vers' resource and the 'MDED' owner string; generated from VERSION. */
+#include "version.r"
+
 /* ---- Main document window ---- */
 
 resource 'WIND' (128, "MacDown") {
@@ -321,12 +324,6 @@ resource 'FREF' (128) {
 
 resource 'FREF' (129) {
     'TEXT', 1, ""
-};
-
-/* App signature for the Finder. Pair with creator 'MDED' set on output. */
-type 'MDED' as 'STR ';
-resource 'MDED' (0, "Owner resource") {
-    "MacDown 1.0"
 };
 
 /* App / document icons — generated from app.png / document.png by

@@ -1,6 +1,31 @@
 cmake_minimum_required(VERSION 3.9)
 project(MacDown C)
 
+# Single source of truth for the version number is /VERSION at the
+# project root. We parse it into MAJOR/MINOR/PATCH so we can also bake
+# the BCD bytes the 'vers' resource needs, then configure_file two
+# artifacts:
+#   - ${CMAKE_BINARY_DIR}/version.r — included by resources/MacDown.r
+#   - MACDOWN_VERSION_STR compile-time #define — used by main.c
+# Bump the VERSION file and rebuild; everything else follows.
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" _MACDOWN_VERSION_RAW)
+string(STRIP "${_MACDOWN_VERSION_RAW}" MACDOWN_VERSION)
+if(NOT MACDOWN_VERSION MATCHES "^([0-9])\\.([0-9])\\.([0-9])")
+    message(FATAL_ERROR
+        "VERSION must be MAJOR.MINOR.PATCH with single-digit components "
+        "(BCD packing in 'vers' resource); got: '${MACDOWN_VERSION}'")
+endif()
+set(MACDOWN_VER_MAJOR ${CMAKE_MATCH_1})
+set(MACDOWN_VER_MINOR ${CMAKE_MATCH_2})
+set(MACDOWN_VER_PATCH ${CMAKE_MATCH_3})
+configure_file(
+    ${CMAKE_SOURCE_DIR}/resources/version.r.in
+    ${CMAKE_BINARY_DIR}/version.r
+    @ONLY)
+list(APPEND REZ_INCLUDE_PATH ${CMAKE_BINARY_DIR})
+add_compile_definitions(MACDOWN_VERSION_STR="${MACDOWN_VERSION}")
+message(STATUS "MacDown version: ${MACDOWN_VERSION}")
+
 # Regenerate src/toolbar_icons.h whenever an assets/icons PNG changes.
 # The header holds 15x15 1-bit QuickDraw bitmaps for the browser
 # toolbar buttons; browser.c #includes it directly.
