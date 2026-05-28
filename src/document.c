@@ -2200,13 +2200,10 @@ void DocUndo(DocState *doc)
         return;
     }
 
-    /* Stash current state so a second Cmd-Z toggles back (redo). */
+    /* Stash current state so a second Cmd-Z toggles back (redo).
+       If memory is too tight for the snapshot, proceed with the undo
+       anyway — the user just loses the ability to redo. */
     curText = SnapshotText(doc, &curLen);
-    if (curText == NULL)
-    {
-        SysBeep(1);
-        return;
-    }
     curSelStart = (**doc->te).selStart;
     curSelEnd = (**doc->te).selEnd;
     curLE = doc->leKind;
@@ -2227,20 +2224,24 @@ void DocUndo(DocState *doc)
     doc->leKind = doc->undoLE;
 
     MdRestyleAll(doc->te);
-    /* No TECalText: TESetText already recomputes line breaks, and
-       MdRestyleAll only changes faces (size 12 throughout). */
 
     SetClip(savedClip);
     DisposeRgn(savedClip);
     DisposeRgn(emptyRgn);
 
     DisposeHandle(doc->undoText);
-    doc->undoText = curText;
-    doc->undoLen = curLen;
-    doc->undoSelStart = curSelStart;
-    doc->undoSelEnd = curSelEnd;
-    doc->undoLE = curLE;
-    doc->canUndo = true;
+    if (curText != NULL) {
+        doc->undoText = curText;
+        doc->undoLen = curLen;
+        doc->undoSelStart = curSelStart;
+        doc->undoSelEnd = curSelEnd;
+        doc->undoLE = curLE;
+        doc->canUndo = true;
+    } else {
+        doc->undoText = NULL;
+        doc->canUndo = false;
+        SetUndoMenuEnabled(false);
+    }
     doc->inTypingRun = false;
 
     doc->dirty = true;

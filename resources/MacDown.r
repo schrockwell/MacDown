@@ -398,6 +398,6 @@ resource 'SIZE' (-1) {
     reserved,
     reserved,
     reserved,
-    524288,                 /* 512K preferred */
-    262144                  /* 256K minimum */
+    786432,                 /* 768K preferred */
+    393216                  /* 384K minimum */
 };

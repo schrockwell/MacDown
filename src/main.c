@@ -120,6 +120,9 @@ static void Initialize(void)
     FlushEvents(everyEvent, 0);
     MaxApplZone();
     MoreMasters();
+    MoreMasters();
+    MoreMasters();
+    MoreMasters();
 
     menuBar = GetNewMBar(kMenuBarID);
     SetMenuBar(menuBar);
