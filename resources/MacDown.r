@@ -39,6 +39,7 @@ resource 'MENU' (129, "File") {
     {
         "New",                    noIcon, "N",    noMark, plain;
         "Open\0xC9",              noIcon, "O",    noMark, plain;
+        "-",                      noIcon, noKey,  noMark, plain;
         "Close",                  noIcon, "W",    noMark, plain;
         "Close All",              noIcon, noKey,  noMark, plain;
         "Save",                   noIcon, "S",    noMark, plain;
@@ -60,7 +61,7 @@ resource 'MENU' (130, "Edit") {
         "Clear",                      noIcon, noKey,  noMark, plain;
         "Select All",                 noIcon, "A",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
-        "Duplicate Line",             noIcon, "D",    noMark, plain;
+        "Duplicate",                  noIcon, "D",    noMark, plain;
     }
 };
 
@@ -170,7 +171,7 @@ resource 'DITL' (128, "Error") {
 /* ---- Save changes? prompt ---- */
 
 resource 'ALRT' (129, "Save Changes") {
-    { 80, 80, 200, 420 },
+    { 80, 80, 188, 396 },
     129,
     {
         OK, visible, sound1;
@@ -183,16 +184,16 @@ resource 'ALRT' (129, "Save Changes") {
 
 resource 'DITL' (129, "Save Changes") {
     {
-        { 80, 232, 100, 312 },
+        { 75, 224, 95, 304 },
         Button { enabled, "Save" };
 
-        { 80, 12, 100, 92 },
+        { 75, 12, 95, 92 },
         Button { enabled, "Don\0xD5t Save" };
 
-        { 80, 122, 100, 202 },
+        { 75, 112, 95, 192 },
         Button { enabled, "Cancel" };
 
-        { 12, 64, 64, 308 },
+        { 10, 60, 62, 304 },
         StaticText { disabled,
             "Save changes to this document before closing?" };
     }

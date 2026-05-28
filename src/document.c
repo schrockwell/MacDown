@@ -33,10 +33,10 @@
 #define kUndoMenuID 130
 #define kUndoMenuItem 1
 #define kFileMenuID 129
-#define kFileMenuClose    3
-#define kFileMenuCloseAll 4
-#define kFileMenuSave     5
-#define kFileMenuSaveAs   6
+#define kFileMenuClose    4
+#define kFileMenuCloseAll 5
+#define kFileMenuSave     6
+#define kFileMenuSaveAs   7
 #define kWindowsMenuID 132
 #define kWindowsMenuStaticItems 3 /* Next, Browser, separator */
 
@@ -1396,6 +1396,9 @@ static void MoveLine(DocState *doc, Boolean down)
     DocFlushRestyle(doc);
     DocMarkDirty(doc);
     DocAdjustScrollbar(doc);
+
+    SetPort(doc->window);
+    InvalRect(&doc->window->portRect);
 }
 
 void DocMoveLineUp(DocState *doc) { MoveLine(doc, false); }
@@ -1405,28 +1408,38 @@ void DocMoveLineDown(DocState *doc) { MoveLine(doc, true); }
    duplicate at the same column. */
 void DocDuplicateLine(DocState *doc)
 {
-    short pos, lineStart, lineEnd, lineLen, col, newPos;
+    short selStart, selEnd, firstLineStart, lastLineEnd;
+    short rangeLen, newSelStart, newSelEnd;
     Handle buf;
     GrafPtr savedPort;
     RgnHandle savedClip, emptyRgn;
 
     DocBeforeAction(doc);
-    pos = (**doc->te).selStart;
-    MdFindLineBounds(doc->te, pos, &lineStart, &lineEnd);
-    lineLen = lineEnd - lineStart;
-    col = pos - lineStart;
+    selStart = (**doc->te).selStart;
+    selEnd   = (**doc->te).selEnd;
 
-    /* Buffer holds "\r" followed by the line's text. */
-    buf = NewHandle((long)lineLen + 1);
+    /* Expand to full lines covering the selection (or current line). */
+    {
+        short dummy;
+        MdFindLineBounds(doc->te, selStart, &firstLineStart, &dummy);
+        if (selEnd > selStart)
+            MdFindLineBounds(doc->te, selEnd - 1, &dummy, &lastLineEnd);
+        else
+            lastLineEnd = dummy;
+    }
+
+    rangeLen = lastLineEnd - firstLineStart;
+
+    buf = NewHandle((long)rangeLen + 1);
     if (buf == NULL)
         return;
     HLock(buf);
     (*buf)[0] = '\r';
-    if (lineLen > 0)
+    if (rangeLen > 0)
     {
         CharsHandle ch = TEGetText(doc->te);
         HLock((Handle)ch);
-        BlockMoveData(*ch + lineStart, *buf + 1, lineLen);
+        BlockMoveData(*ch + firstLineStart, *buf + 1, rangeLen);
         HUnlock((Handle)ch);
     }
 
@@ -1437,8 +1450,8 @@ void DocDuplicateLine(DocState *doc)
     GetClip(savedClip);
     SetClip(emptyRgn);
 
-    TESetSelect(lineEnd, lineEnd, doc->te);
-    TEInsert(*buf, lineLen + 1, doc->te);
+    TESetSelect(lastLineEnd, lastLineEnd, doc->te);
+    TEInsert(*buf, rangeLen + 1, doc->te);
 
     SetClip(savedClip);
     DisposeRgn(savedClip);
@@ -1448,16 +1461,24 @@ void DocDuplicateLine(DocState *doc)
     HUnlock(buf);
     DisposeHandle(buf);
 
-    newPos = lineEnd + 1 + col;
-    TESetSelect(newPos, newPos, doc->te);
-    doc->selAnchor = newPos;
+    /* Place cursor/selection on the duplicated copy. */
+    newSelStart = lastLineEnd + 1 + (selStart - firstLineStart);
+    newSelEnd   = lastLineEnd + 1 + (selEnd   - firstLineStart);
+    TESetSelect(newSelStart, newSelEnd, doc->te);
+    doc->selAnchor = newSelStart;
 
     DocMarkDirty(doc);
-    doc->dirtyLineStart = lineStart;
-    doc->dirtyLineEnd = lineEnd + 1 + lineLen;
+    doc->dirtyLineStart = firstLineStart;
+    doc->dirtyLineEnd = (**doc->te).teLength;
     doc->lastDirtyTick = TickCount() - 1000;
     DocFlushRestyle(doc);
     DocAdjustScrollbar(doc);
+
+    /* The TEInsert was clip-suppressed so nothing drew the new text.
+       DocFlushRestyle may skip its redraw if no styles changed (plain
+       text). Force a full repaint via the update event. */
+    SetPort(doc->window);
+    InvalRect(&doc->window->portRect);
 }
 
 /* ---- Heading toggle ---- */

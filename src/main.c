@@ -34,11 +34,11 @@
 
 #define kFileNew      1
 #define kFileOpen     2
-#define kFileClose    3
-#define kFileCloseAll 4
-#define kFileSave     5
-#define kFileSaveAs   6
-#define kFileQuit     8
+#define kFileClose    4
+#define kFileCloseAll 5
+#define kFileSave     6
+#define kFileSaveAs   7
+#define kFileQuit     9
 
 #define kEditUndo      1
 #define kEditCut       3
