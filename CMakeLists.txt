@@ -29,6 +29,7 @@ add_application(MacDown
     src/file_io.c
     src/browser.c
     src/markdown.c
+    src/pstr.c
     src/apple_events.c
     resources/MacDown.r
     CREATOR MDED

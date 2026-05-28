@@ -16,6 +16,7 @@
 
 #include "markdown.h"
 #include "browser.h"
+#include "pstr.h"
 #include "file_io.h"
 
 #define kWindowID 128
@@ -193,6 +194,16 @@ void EndClipSuppress(ClipSuppress *cs)
     DisposeRgn(cs->savedClip);
     DisposeRgn(cs->emptyRgn);
     SetPort(cs->savedPort);
+}
+
+void DocCommitEdit(DocState *doc, short dirtyStart, short dirtyEnd)
+{
+    DocMarkDirty(doc);
+    doc->dirtyLineStart = dirtyStart;
+    doc->dirtyLineEnd   = dirtyEnd;
+    doc->lastDirtyTick  = TickCount() - 1000;
+    DocFlushRestyle(doc);
+    DocAdjustScrollbar(doc);
 }
 
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
@@ -539,9 +550,7 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 
     doc->hasFile = true;
     doc->vRefNum = ownedWD;
-    doc->fileName[0] = name[0];
-    for (i = 1; i <= name[0]; i++)
-        doc->fileName[i] = name[i];
+    PStrCopy(doc->fileName, name);
     doc->leKind = le;
     doc->dirty = false;
     DocClearUndo(doc);
@@ -701,18 +710,9 @@ Boolean DocSaveAs(DocState *doc)
     }
 
     if (doc->hasFile)
-    {
-        suggestion[0] = doc->fileName[0];
-        for (i = 1; i <= doc->fileName[0]; i++)
-            suggestion[i] = doc->fileName[i];
-    }
+        PStrCopy(suggestion, doc->fileName);
     else
-    {
-        const unsigned char *def = (const unsigned char *)"\puntitled.md";
-        suggestion[0] = def[0];
-        for (i = 1; i <= def[0]; i++)
-            suggestion[i] = def[i];
-    }
+        PStrCopy(suggestion, "\puntitled.md");
 
     GetPort(&savedPort);
     SetPort(doc->window);
@@ -756,9 +756,7 @@ Boolean DocSaveAs(DocState *doc)
         doc->vRefNum = ownedWD;
     }
 
-    doc->fileName[0] = reply.fName[0];
-    for (i = 1; i <= reply.fName[0]; i++)
-        doc->fileName[i] = reply.fName[i];
+    PStrCopy(doc->fileName, reply.fName);
     doc->hasFile = true;
 
     return DocSave(doc);
@@ -1399,12 +1397,7 @@ static void MoveLine(DocState *doc, Boolean down)
     HUnlock(buf);
     DisposeHandle(buf);
 
-    doc->dirtyLineStart = rangeStart;
-    doc->dirtyLineEnd = rangeStart + curLen + 1 + otherLen;
-    doc->lastDirtyTick = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocMarkDirty(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, rangeStart, rangeStart + curLen + 1 + otherLen);
 
     SetPort(doc->window);
     InvalRect(&doc->window->portRect);
@@ -1467,12 +1460,7 @@ void DocDuplicateLine(DocState *doc)
     TESetSelect(newSelStart, newSelEnd, doc->te);
     doc->selAnchor = newSelStart;
 
-    DocMarkDirty(doc);
-    doc->dirtyLineStart = firstLineStart;
-    doc->dirtyLineEnd = (**doc->te).teLength;
-    doc->lastDirtyTick = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, firstLineStart, (**doc->te).teLength);
 
     /* The TEInsert was clip-suppressed so nothing drew the new text.
        DocFlushRestyle may skip its redraw if no styles changed (plain
@@ -1573,12 +1561,7 @@ void DocToggleHeading(DocState *doc, short level)
 
     EndClipSuppress(&cs);
 
-    DocMarkDirty(doc);
-    doc->dirtyLineStart = lineStart;
-    doc->dirtyLineEnd   = lineEnd + (newPrefixLen - oldPrefixLen);
-    doc->lastDirtyTick  = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, lineStart, lineEnd + (newPrefixLen - oldPrefixLen));
 }
 
 /* ---- Symmetric pair wrap / toggle (Cmd-B, Cmd-I, Cmd-`) ---- */
@@ -1701,13 +1684,8 @@ void DocWrapPair(DocState *doc, char ch, short n)
 
     EndClipSuppress(&cs);
 
-    DocMarkDirty(doc);
     MdFindLineBounds(doc->te, cursor, &lineStart, &lineEnd);
-    doc->dirtyLineStart = lineStart;
-    doc->dirtyLineEnd   = lineEnd;
-    doc->lastDirtyTick  = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, lineStart, lineEnd);
 }
 
 /* ---- Cursor movement helpers ---- */
@@ -1943,12 +1921,7 @@ static void IndentRange(DocState *doc, Boolean indent)
     TESetSelect(newStart, newEnd, doc->te);
     doc->selAnchor = newStart;
 
-    DocMarkDirty(doc);
-    doc->dirtyLineStart = firstLineStart;
-    doc->dirtyLineEnd = lastLineEnd + totalDelta;
-    doc->lastDirtyTick = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, firstLineStart, lastLineEnd + totalDelta);
 }
 
 void DocIndentLine(DocState *doc) { IndentRange(doc, true); }
@@ -2054,12 +2027,7 @@ void DocToggleBlockquote(DocState *doc)
     TESetSelect(newStart, newEnd, doc->te);
     doc->selAnchor = newStart;
 
-    DocMarkDirty(doc);
-    doc->dirtyLineStart = firstLineStart;
-    doc->dirtyLineEnd   = lastLineEnd + totalDelta;
-    doc->lastDirtyTick  = TickCount() - 1000;
-    DocFlushRestyle(doc);
-    DocAdjustScrollbar(doc);
+    DocCommitEdit(doc, firstLineStart, lastLineEnd + totalDelta);
 }
 
 /* ---- I-beam cursor ---- */

@@ -3,6 +3,18 @@
 
 #include <Files.h>
 
+/* Zero every byte of a stack struct (typically a ParamBlock or SFReply).
+   The Multiversal Interfaces' File-Manager glue functions sometimes read
+   fields they didn't intend to set (e.g. SetFInfo's ioFDirIndex starts as
+   stack garbage and triggers an indexed lookup, returning the wrong file).
+   Bypassing the glue with a zeroed PB is the documented workaround. */
+#define ZeroStruct(pb) \
+    do { \
+        char *_zp = (char *)&(pb); \
+        short _zi; \
+        for (_zi = 0; _zi < (short)sizeof(pb); _zi++) _zp[_zi] = 0; \
+    } while (0)
+
 typedef enum {
     kLE_CR = 0,    /* classic Mac, default if no line endings found */
     kLE_LF,        /* Unix */

@@ -14,6 +14,7 @@
 
 #include "file_io.h"
 #include "document.h"
+#include "pstr.h"
 #include "toolbar_icons.h"
 
 #define kBrowserWindowID  131
@@ -362,21 +363,6 @@ static pascal void BrowserScrollAction(ControlHandle ctl, short part)
     BrowserDrawList();
 }
 
-static Boolean StrEq(ConstStr255Param a, ConstStr255Param b)
-{
-    short i;
-    if (a[0] != b[0]) return false;
-    for (i = 1; i <= a[0]; i++) if (a[i] != b[i]) return false;
-    return true;
-}
-
-static void StrCopy(StringPtr dst, ConstStr255Param src)
-{
-    short i;
-    dst[0] = src[0];
-    for (i = 1; i <= src[0]; i++) dst[i] = src[i];
-}
-
 /* ---- initial folder picker ---- */
 
 /* Standard File's dlgHook lets us mutate the dialog while it's up.
@@ -425,10 +411,9 @@ static Boolean BrowserPickFolder(short *outVRef, long *outDirID)
 {
     SFReply reply;
     Point where;
-    short i;
     GrafPtr savedPort;
 
-    { char *p = (char *)&reply; for (i = 0; i < (short)sizeof(SFReply); i++) p[i] = 0; }
+    ZeroStruct(reply);
 
     GetPort(&savedPort);
     InitCursor();
@@ -546,7 +531,7 @@ static Boolean BrowserPromptFolderName(StringPtr outName)
         if (ihdl != NULL) {
             GetDialogItemText(ihdl, entered);
             if (entered[0] > 63) entered[0] = 63;
-            StrCopy(outName, entered);
+            PStrCopy(outName, entered);
         }
     }
 
@@ -560,15 +545,11 @@ static void BrowserCreateNewFolder(void)
 {
     Str63 name;
     HParamBlockRec pb;
-    short i;
     OSErr err;
 
     if (!BrowserPromptFolderName(name)) return;
 
-    {
-        char *p = (char *)&pb;
-        for (i = 0; i < (short)sizeof(pb); i++) p[i] = 0;
-    }
+    ZeroStruct(pb);
     pb.fileParam.ioNamePtr = (StringPtr)name;
     pb.fileParam.ioVRefNum = gFolderVRef;
     pb.fileParam.ioDirID   = gFolderID;
@@ -620,7 +601,7 @@ static void BrowserDeleteSelected(void)
     }
     HLock(gEntries);
     entries = BrowserEntries();
-    StrCopy(name, entries[gSelectedIdx].name);
+    PStrCopy(name, entries[gSelectedIdx].name);
     isFolder  = entries[gSelectedIdx].isFolder;
     targetDir = entries[gSelectedIdx].dirID;
     HUnlock(gEntries);
@@ -634,7 +615,7 @@ static void BrowserDeleteSelected(void)
     {
         const unsigned char *folderLbl = (const unsigned char *)"\pfolder";
         const unsigned char *fileLbl   = (const unsigned char *)"\pfile";
-        StrCopy(typeLabel, isFolder ? folderLbl : fileLbl);
+        PStrCopy(typeLabel, isFolder ? folderLbl : fileLbl);
     }
     ParamText(name, typeLabel, "\p", "\p");
     hit = CautionAlert(131, NULL);
@@ -677,12 +658,12 @@ static void BrowserLoadCurrent(void)
         pb.dirInfo.ioDrDirID    = gFolderID;
         err = PBGetCatInfoSync(&pb);
         if (err == noErr) {
-            StrCopy(gFolderName, nm);
+            PStrCopy(gFolderName, nm);
             gParentDirID = pb.dirInfo.ioDrParID;
             gLastModDate = pb.dirInfo.ioDrMdDat;
         } else {
             const unsigned char *fb = (const unsigned char *)"\pFolder";
-            StrCopy(gFolderName, fb);
+            PStrCopy(gFolderName, fb);
             gParentDirID = 0;
             gLastModDate = 0;
         }
@@ -723,7 +704,7 @@ static void BrowserLoadCurrent(void)
             HLock(gEntries);
             entries = BrowserEntries();
         }
-        StrCopy(entries[count].name, name);
+        PStrCopy(entries[count].name, name);
         entries[count].isFolder = isDir;
         entries[count].dirID    = isDir ? pb.dirInfo.ioDrDirID : 0;
         count++;
@@ -843,7 +824,7 @@ static void BrowserOpenFileEntry(short idx)
     HLock(gEntries);
     entries = BrowserEntries();
     if (entries[idx].isFolder) { HUnlock(gEntries); return; }
-    StrCopy(name, entries[idx].name);
+    PStrCopy(name, entries[idx].name);
     HUnlock(gEntries);
 
     /* If the file is already open, raise that window instead of

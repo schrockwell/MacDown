@@ -93,6 +93,12 @@ void DocMarkLineDirty(DocState *doc, short pos);
 void DocFlushRestyle(DocState *doc);
 void DocUpdateTitle(DocState *doc);
 
+/* Commit a structural edit: mark the doc dirty, set the restyle range
+   to [dirtyStart, dirtyEnd], force an immediate flush, and resync the
+   scrollbar. Replaces the 6-line tail that follows every TE-mutating
+   operation (heading toggle, indent, blockquote, duplicate, etc.). */
+void DocCommitEdit(DocState *doc, short dirtyStart, short dirtyEnd);
+
 /* Line manipulation. */
 void DocMoveLineUp(DocState *doc);
 void DocMoveLineDown(DocState *doc);

@@ -279,7 +279,6 @@ OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
 {
     ParamBlockRec pb;
     OSErr err;
-    short i;
 
     /* The Multiversal Interfaces `SetFInfo` glue doesn't clear
        ioFDirIndex before calling PBGetFInfoSync. If the stack has
@@ -288,10 +287,7 @@ OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
        buffer (ioNamePtr) with the indexed file's name — clobbering
        doc->fileName and then setting the type/creator on the wrong
        file. We bypass the glue and zero the whole block first. */
-    {
-        char *p = (char *)&pb;
-        for (i = 0; i < (short)sizeof(pb); i++) p[i] = 0;
-    }
+    ZeroStruct(pb);
     pb.fileParam.ioNamePtr   = (StringPtr)name;
     pb.fileParam.ioVRefNum   = vRefNum;
     pb.fileParam.ioFVersNum  = 0;
