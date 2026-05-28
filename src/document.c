@@ -177,6 +177,24 @@ void SyncFileMenuEnables(void)
         DisableItem(m, kFileMenuCloseAll);
 }
 
+void BeginClipSuppress(ClipSuppress *cs, GrafPtr target)
+{
+    GetPort(&cs->savedPort);
+    SetPort(target);
+    cs->savedClip = NewRgn();
+    cs->emptyRgn  = NewRgn();
+    GetClip(cs->savedClip);
+    SetClip(cs->emptyRgn);
+}
+
+void EndClipSuppress(ClipSuppress *cs)
+{
+    SetClip(cs->savedClip);
+    DisposeRgn(cs->savedClip);
+    DisposeRgn(cs->emptyRgn);
+    SetPort(cs->savedPort);
+}
+
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
 {
     Rect r = w->portRect;
@@ -1313,8 +1331,7 @@ static void MoveLine(DocState *doc, Boolean down)
     CharsHandle ch;
     char *text;
     Handle buf;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     DocBeforeAction(doc);
     pos = (**doc->te).selStart;
@@ -1370,22 +1387,14 @@ static void MoveLine(DocState *doc, Boolean down)
 
     HUnlock((Handle)ch);
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     TESetSelect(rangeStart, rangeEnd, doc->te);
     TEDelete(doc->te);
     TEInsert(*buf, curLen + 1 + otherLen, doc->te);
     TESetSelect(newSel, newSel, doc->te);
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     HUnlock(buf);
     DisposeHandle(buf);
@@ -1411,8 +1420,7 @@ void DocDuplicateLine(DocState *doc)
     short selStart, selEnd, firstLineStart, lastLineEnd;
     short rangeLen, newSelStart, newSelEnd;
     Handle buf;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     DocBeforeAction(doc);
     selStart = (**doc->te).selStart;
@@ -1443,20 +1451,12 @@ void DocDuplicateLine(DocState *doc)
         HUnlock((Handle)ch);
     }
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     TESetSelect(lastLineEnd, lastLineEnd, doc->te);
     TEInsert(*buf, rangeLen + 1, doc->te);
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     HUnlock(buf);
     DisposeHandle(buf);
@@ -1494,8 +1494,7 @@ void DocToggleHeading(DocState *doc, short level)
     CharsHandle ch;
     char *text;
     short newSelStart, newSelEnd;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     if (level < 0 || level > 6) return;
     DocBeforeAction(doc);
@@ -1563,12 +1562,7 @@ void DocToggleHeading(DocState *doc, short level)
         if (newSelEnd < newSelStart)   newSelEnd   = newSelStart;
     }
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn  = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     TESetSelect(markerStart, markerEnd, doc->te);
     if (oldPrefixLen > 0) TEDelete(doc->te);
@@ -1577,10 +1571,7 @@ void DocToggleHeading(DocState *doc, short level)
     TESetSelect(newSelStart, newSelEnd, doc->te);
     doc->selAnchor = newSelStart;
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     DocMarkDirty(doc);
     doc->dirtyLineStart = lineStart;
@@ -1632,8 +1623,7 @@ void DocWrapPair(DocState *doc, char ch, short n)
     char  pair[8];
     Boolean wrappedInside  = false;   /* selection includes markers */
     Boolean wrappedOutside = false;   /* markers sit just outside selection */
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
     short cursor;
     short lineStart, lineEnd;
 
@@ -1670,12 +1660,7 @@ void DocWrapPair(DocState *doc, char ch, short n)
 
     DocBeforeAction(doc);
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn  = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     if (wrappedInside) {
         /* Delete the trailing markers first so positions for the head
@@ -1714,10 +1699,7 @@ void DocWrapPair(DocState *doc, char ch, short n)
         cursor = selStart + n;
     }
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     DocMarkDirty(doc);
     MdFindLineBounds(doc->te, cursor, &lineStart, &lineEnd);
@@ -1880,8 +1862,7 @@ static void IndentRange(DocState *doc, Boolean indent)
     short pos;
     short totalDelta = 0;
     short newStart, newEnd;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     DocBeforeAction(doc);
     selStart = (**doc->te).selStart;
@@ -1895,12 +1876,7 @@ static void IndentRange(DocState *doc, Boolean indent)
     firstLineStart = firstLs;
     lastLineEnd = lastLe;
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     pos = lastLs;
     for (;;)
@@ -1936,10 +1912,7 @@ static void IndentRange(DocState *doc, Boolean indent)
         }
     }
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     if (totalDelta == 0)
     {
@@ -1994,8 +1967,7 @@ void DocToggleBlockquote(DocState *doc)
     short totalDelta = 0;
     short newStart, newEnd;
     Boolean addQuote;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     DocBeforeAction(doc);
     selStart = (**doc->te).selStart;
@@ -2024,12 +1996,7 @@ void DocToggleBlockquote(DocState *doc)
         addQuote = !firstIsQuote;
     }
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn  = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
+    BeginClipSuppress(&cs, doc->window);
 
     /* Walk lines back to front so earlier line positions stay valid. */
     pos = lastLs;
@@ -2069,10 +2036,7 @@ void DocToggleBlockquote(DocState *doc)
         }
     }
 
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 
     if (isSelection) {
         newStart = firstLineStart;

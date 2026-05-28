@@ -73,6 +73,20 @@ void DocAdjustScrollbar(DocState *doc);
 /* Menu state — enable/disable doc-dependent items. */
 void SyncFileMenuEnables(void);
 
+/* Suppress QuickDraw output to `target` for the duration of a block
+   of TE work (TESetSelect/TESetStyle/TEInsert/TEDelete all paint into
+   their inPort, which we usually want to redraw ourselves afterwards).
+   Saves the current port + clip, sets the target as current with an
+   empty clip; End() restores everything and disposes the regions. */
+typedef struct {
+    GrafPtr   savedPort;
+    RgnHandle savedClip;
+    RgnHandle emptyRgn;
+} ClipSuppress;
+
+void BeginClipSuppress(ClipSuppress *cs, GrafPtr target);
+void EndClipSuppress(ClipSuppress *cs);
+
 /* Selection / dirty tracking. */
 void DocMarkDirty(DocState *doc);
 void DocMarkLineDirty(DocState *doc, short pos);

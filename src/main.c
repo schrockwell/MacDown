@@ -257,8 +257,7 @@ static void ResetInsertStyleToPlain(DocState *doc)
     short pos = (**doc->te).selStart;
     short crPos;
     TextStyle plain;
-    GrafPtr savedPort;
-    RgnHandle savedClip, emptyRgn;
+    ClipSuppress cs;
 
     if (pos < 1)
         return;
@@ -269,21 +268,11 @@ static void ResetInsertStyleToPlain(DocState *doc)
     plain.tsSize = 12;
     plain.tsColor.red = plain.tsColor.green = plain.tsColor.blue = 0;
 
-    GetPort(&savedPort);
-    SetPort(doc->window);
-    savedClip = NewRgn();
-    emptyRgn = NewRgn();
-    GetClip(savedClip);
-    SetClip(emptyRgn);
-
+    BeginClipSuppress(&cs, doc->window);
     TESetSelect(crPos, pos, doc->te);
     TESetStyle(doFace | doSize, &plain, false, doc->te);
     TESetSelect(pos, pos, doc->te);
-
-    SetClip(savedClip);
-    DisposeRgn(savedClip);
-    DisposeRgn(emptyRgn);
-    SetPort(savedPort);
+    EndClipSuppress(&cs);
 }
 
 static Boolean HandleReturnKey(DocState *doc)
