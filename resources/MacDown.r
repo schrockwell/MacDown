@@ -112,7 +112,7 @@ resource 'MENU' (132, "Window") {
    runtime — see DoAbout() in src/main.c. */
 
 resource 'WIND' (129, "About") {
-    { 90, 80, 230, 432 },
+    { 90, 80, 190, 400 },
     dBoxProc,
     visible,
     noGoAway,
@@ -122,7 +122,7 @@ resource 'WIND' (129, "About") {
 };
 
 resource 'WIND' (130, "Shortcuts") {
-    { 60, 60, 240, 420 },
+    { 60, 60, 215, 420 },
     dBoxProc,
     visible,
     noGoAway,
@@ -171,7 +171,7 @@ resource 'DITL' (128, "Error") {
 /* ---- Save changes? prompt ---- */
 
 resource 'ALRT' (129, "Save Changes") {
-    { 80, 80, 188, 396 },
+    { 70, 60, 210, 380 },
     129,
     {
         OK, visible, sound1;
@@ -184,18 +184,18 @@ resource 'ALRT' (129, "Save Changes") {
 
 resource 'DITL' (129, "Save Changes") {
     {
-        { 75, 224, 95, 304 },
-        Button { enabled, "Save" };
+        { 72, 20, 92, 80 },
+        Button { enabled, "Yes" };
 
-        { 75, 12, 95, 92 },
-        Button { enabled, "Don\0xD5t Save" };
+        { 102, 20, 122, 80 },
+        Button { enabled, "No" };
 
-        { 75, 112, 95, 192 },
+        { 102, 240, 122, 304 },
         Button { enabled, "Cancel" };
 
-        { 10, 60, 62, 304 },
+        { 10, 72, 58, 304 },
         StaticText { disabled,
-            "Save changes to this document before closing?" };
+            "Do you want to save the changes you made?" };
     }
 };
 

@@ -755,7 +755,7 @@ Boolean DocPromptSaveIfDirty(DocState *doc)
         return true;
     InitCursor();
     SelectWindow(doc->window); /* so the alert appears in front of THIS doc */
-    item = StopAlert(kSaveChangesALRT, NULL);
+    item = CautionAlert(kSaveChangesALRT, NULL);
     switch (item)
     {
     case 1:
