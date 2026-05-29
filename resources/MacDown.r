@@ -115,7 +115,7 @@ resource 'MENU' (132, "Window") {
    runtime — see DoAbout() in src/main.c. */
 
 resource 'WIND' (129, "About") {
-    { 90, 80, 190, 400 },
+    { 90, 80, 195, 400 },
     dBoxProc,
     visible,
     noGoAway,
