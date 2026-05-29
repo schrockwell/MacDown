@@ -204,6 +204,14 @@ void DocCommitEdit(DocState *doc, short dirtyStart, short dirtyEnd)
     doc->lastDirtyTick  = TickCount() - 1000;
     DocFlushRestyle(doc);
     DocAdjustScrollbar(doc);
+
+    /* Force a full update event. Callers do clip-suppressed TE edits,
+       which means TE never drew the new text. DocFlushRestyle's own
+       offscreen redraw is skipped when no styles changed (common for
+       plain text), so we'd be left with stale pixels. One InvalRect at
+       the end of every commit is the cheapest reliable fix. */
+    SetPort(doc->window);
+    InvalRect(&doc->window->portRect);
 }
 
 static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
@@ -1398,9 +1406,6 @@ static void MoveLine(DocState *doc, Boolean down)
     DisposeHandle(buf);
 
     DocCommitEdit(doc, rangeStart, rangeStart + curLen + 1 + otherLen);
-
-    SetPort(doc->window);
-    InvalRect(&doc->window->portRect);
 }
 
 void DocMoveLineUp(DocState *doc) { MoveLine(doc, false); }
@@ -1462,11 +1467,6 @@ void DocDuplicateLine(DocState *doc)
 
     DocCommitEdit(doc, firstLineStart, (**doc->te).teLength);
 
-    /* The TEInsert was clip-suppressed so nothing drew the new text.
-       DocFlushRestyle may skip its redraw if no styles changed (plain
-       text). Force a full repaint via the update event. */
-    SetPort(doc->window);
-    InvalRect(&doc->window->portRect);
 }
 
 /* ---- Heading toggle ---- */

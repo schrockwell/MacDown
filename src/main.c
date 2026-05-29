@@ -671,10 +671,12 @@ static void DoToggleTask(DocState *doc)
 {
     short pos;
     short lineStart, lineEnd, lineLen;
+    short leading;       /* count of all leading whitespace bytes */
+    short contentStart;  /* lineStart + leading */
+    short contentLen;
     CharsHandle ch;
     char *text;
     MdLineKind kind;
-    short leading;
 
     DocBeforeAction(doc);
     pos = (**doc->te).selStart;
@@ -684,24 +686,26 @@ static void DoToggleTask(DocState *doc)
     ch = TEGetText(doc->te);
     HLock((Handle)ch);
     text = *ch + lineStart;
-    kind = MdClassifyLine(text, lineLen);
 
+    /* Count every leading tab and space, not just up to 3 spaces.
+       Classify the line as if it started after the indent so nested
+       (deeply-indented or tab-indented) list/task lines are still
+       recognized. All edits happen at offsets relative to the indent. */
     leading = 0;
-    while (leading < lineLen && leading < 3 && text[leading] == ' ')
+    while (leading < lineLen &&
+           (text[leading] == ' ' || text[leading] == '\t'))
         leading++;
+    contentStart = lineStart + leading;
+    contentLen   = lineLen - leading;
+    kind = MdClassifyLine(text + leading, contentLen);
     HUnlock((Handle)ch);
 
     if (kind == kLine_TaskUnchecked || kind == kLine_TaskChecked)
     {
-        short boxPos = MdFindTaskBox(doc->te, pos);
+        /* Layout from contentStart: "- [<state>] ..." -> state at +3. */
+        short boxPos = contentStart + 3;
         short savedStart, savedEnd;
         char current, replacement;
-
-        if (boxPos < 0)
-        {
-            SysBeep(1);
-            return;
-        }
 
         savedStart = (**doc->te).selStart;
         savedEnd = (**doc->te).selEnd;
@@ -725,7 +729,7 @@ static void DoToggleTask(DocState *doc)
 
     if (kind == kLine_UnorderedItem)
     {
-        short insertPos = lineStart + leading + 2;
+        short insertPos = contentStart + 2;   /* after "- " marker */
         short newSel = (pos >= insertPos) ? pos + 4 : pos;
         TESetSelect(insertPos, insertPos, doc->te);
         TEInsert((Ptr) "[ ] ", 4, doc->te);
@@ -737,8 +741,10 @@ static void DoToggleTask(DocState *doc)
     }
 
     {
-        short newSel = pos + 6;
-        TESetSelect(lineStart, lineStart, doc->te);
+        /* Insert the full "- [ ] " prefix AFTER any indent, not at
+           lineStart, so an indented plain line keeps its indentation. */
+        short newSel = (pos >= contentStart) ? pos + 6 : pos;
+        TESetSelect(contentStart, contentStart, doc->te);
         TEInsert((Ptr) "- [ ] ", 6, doc->te);
         TESetSelect(newSel, newSel, doc->te);
         DocMarkDirty(doc);

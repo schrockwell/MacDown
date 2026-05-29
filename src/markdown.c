@@ -396,7 +396,7 @@ Boolean MdNextListMarker(TEHandle te, short pos,
     short len;
     CharsHandle ch;
     char *text;
-    short i, contentStart;
+    short i, leading, contentStart;
     Boolean result = false;
     MdLineKind kind;
 
@@ -412,10 +412,19 @@ Boolean MdNextListMarker(TEHandle te, short pos,
     HLock((Handle)ch);
     text = *ch + lineStart;
 
-    kind = MdClassifyLine(text, len);
+    /* Count every leading tab / space (capped to leave room for the
+       marker in the caller's 24-byte buffer), classify the line as
+       if it started after the indent, and remember `leading` so we
+       can prefix the continuation marker with the same indent below. */
+    leading = 0;
+    while (leading < len && leading < 16 &&
+           (text[leading] == ' ' || text[leading] == '\t'))
+        leading++;
 
-    /* Find where the marker ends / content begins. */
-    i = SkipLeadingSpaces(text, len, 3);
+    kind = MdClassifyLine(text + leading, len - leading);
+
+    /* Marker scan starts right after the indent. */
+    i = leading;
 
     switch (kind) {
         case kLine_UnorderedItem:
@@ -493,6 +502,19 @@ Boolean MdNextListMarker(TEHandle te, short pos,
             j++;
         }
         *outIsEmpty = empty;
+    }
+
+    /* Prefix the marker with the same indent so the next line lines up
+       with the current list item. Shift the existing marker bytes right
+       by `leading` and copy the indent into the freed prefix. */
+    if (result && leading > 0) {
+        short markerLen = (unsigned char)outMarker[0];
+        short j;
+        for (j = markerLen; j >= 1; j--)
+            outMarker[j + leading] = outMarker[j];
+        for (j = 0; j < leading; j++)
+            outMarker[1 + j] = text[j];
+        outMarker[0] = (char)(markerLen + leading);
     }
 
     HUnlock((Handle)ch);
