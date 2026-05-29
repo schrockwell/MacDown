@@ -100,6 +100,7 @@ static void DoAbout(void);
 static Boolean HandleReturnKey(DocState *doc);
 static void DoToggleTask(DocState *doc);
 static void DoDeleteWordBack(DocState *doc);
+static void DoDeleteLineBack(DocState *doc);
 static void DoInsertLink(DocState *doc);
 static void DoFileOpen(void);
 static Boolean IsArrow(char c);
@@ -397,6 +398,13 @@ static void HandleKey(EventRecord *ev)
         return;
     }
 
+    if (cmd && !option && c == 0x08)
+    {
+        DocBeforeAction(doc);
+        DoDeleteLineBack(doc);
+        return;
+    }
+
     if (cmd && !option && !shift)
     {
         if (c == '[')
@@ -667,12 +675,49 @@ static void DoDeleteWordBack(DocState *doc)
     DocAdjustScrollbar(doc);
 }
 
+/* Cmd-Delete: kill from cursor back to line start. If already at the
+   start of the line, fall back to a single-char backspace so repeated
+   presses keep nibbling across line breaks. */
+static void DoDeleteLineBack(DocState *doc)
+{
+    short curPos = (**doc->te).selStart;
+    short curEnd = (**doc->te).selEnd;
+    short lineStart;
+    short newCur;
+
+    if (curPos != curEnd)
+    {
+        TEDelete(doc->te);
+    }
+    else
+    {
+        lineStart = DocLineStartOffset(doc, curPos);
+        if (curPos > lineStart)
+        {
+            TESetSelect(lineStart, curPos, doc->te);
+            TEDelete(doc->te);
+        }
+        else
+        {
+            if (curPos == 0)
+                return;
+            TESetSelect(curPos - 1, curPos, doc->te);
+            TEDelete(doc->te);
+        }
+    }
+    doc->selAnchor = (**doc->te).selStart;
+    DocMarkDirty(doc);
+    newCur = (**doc->te).selStart;
+    ForceRestyleRangeFor(doc, DocLineStartOffset(doc, newCur), DocLineEndOffset(doc, newCur));
+    DocAdjustScrollbar(doc);
+}
+
 static void DoToggleTask(DocState *doc)
 {
     short pos;
     short lineStart, lineEnd, lineLen;
-    short leading;       /* count of all leading whitespace bytes */
-    short contentStart;  /* lineStart + leading */
+    short leading;      /* count of all leading whitespace bytes */
+    short contentStart; /* lineStart + leading */
     short contentLen;
     CharsHandle ch;
     char *text;
@@ -696,7 +741,7 @@ static void DoToggleTask(DocState *doc)
            (text[leading] == ' ' || text[leading] == '\t'))
         leading++;
     contentStart = lineStart + leading;
-    contentLen   = lineLen - leading;
+    contentLen = lineLen - leading;
     kind = MdClassifyLine(text + leading, contentLen);
     HUnlock((Handle)ch);
 
@@ -729,7 +774,7 @@ static void DoToggleTask(DocState *doc)
 
     if (kind == kLine_UnorderedItem)
     {
-        short insertPos = contentStart + 2;   /* after "- " marker */
+        short insertPos = contentStart + 2; /* after "- " marker */
         short newSel = (pos >= insertPos) ? pos + 4 : pos;
         TESetSelect(insertPos, insertPos, doc->te);
         TEInsert((Ptr) "[ ] ", 4, doc->te);
@@ -816,7 +861,11 @@ static void DrawAboutContent(WindowPtr w)
         Str255 vline;
         const char *src = "Version " MACDOWN_VERSION_STR;
         short n = 0;
-        while (src[n] != 0 && n < 255) { vline[n + 1] = src[n]; n++; }
+        while (src[n] != 0 && n < 255)
+        {
+            vline[n + 1] = src[n];
+            n++;
+        }
         vline[0] = n;
         DrawString(vline);
     }
@@ -849,13 +898,15 @@ static void DrawShortcutsContent(WindowPtr w)
     TextSize(9);
 
     y = 56;
-    DrawShortcutRow(y, "\pMove One Word", "\pOption + Left / Right");
+    DrawShortcutRow(y, "\pJump Word", "\pOption + Left / Right");
     y += 16;
     DrawShortcutRow(y, "\pDelete Word", "\pOption + Delete");
     y += 16;
-    DrawShortcutRow(y, "\pMove Line", "\pOption + Up / Down");
+    DrawShortcutRow(y, "\pJump To Start / End of Line", "\pCommand + Left / Right");
     y += 16;
-    DrawShortcutRow(y, "\pStart / End of Line", "\pCommand + Left / Right");
+    DrawShortcutRow(y, "\pDelete Line", "\pCommand + Delete");
+    y += 16;
+    DrawShortcutRow(y, "\pMove Line", "\pOption + Up / Down");
     y += 16;
     DrawShortcutRow(y, "\pText Selection", "\pHold Shift");
 }
