@@ -1,0 +1,119 @@
+name: Build & attach release
+
+# Builds MacDown with the Retro68 cross-compiler and attaches the
+# packaged artifacts to the GitHub Release. Runs on macOS because the
+# release format depends on macOS-only tools: SetFile (type/creator +
+# bundle bit) and binhex/macbinary (the .hqx BinHex container). The
+# Retro68 toolchain (~30-60 min to build) is cached between runs.
+on:
+  release:
+    types: [published]
+  # Manual re-run against an existing release/tag (e.g. to rebuild assets).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and upload to (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write # upload assets to the release
+
+env:
+  # Pin Retro68 to a known-good commit instead of tracking a moving HEAD,
+  # so the Boost patch in scripts/patches/ applies and builds reproduce.
+  # This matches the commit the local deps/retro68/Retro68 clone is on.
+  # Bump it (and it busts the toolchain cache via the key below) when
+  # moving to a newer Retro68 — re-check the patch applies at the new ref.
+  RETRO68_REF: 83b9c8d2c58f8efb0925a305aca1e0edab2e6571
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::No release tag could be resolved" >&2
+            exit 1
+          fi
+          # release.sh names artifacts MacDown-<tag>; drop a leading "v"
+          # so the zip is MacDown-1.0.0.zip, not MacDown-v1.0.0.zip.
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building $TAG (artifact version: $VERSION)"
+
+      - name: Install Homebrew prerequisites
+        run: brew bundle --file=Brewfile
+
+      - name: Cache Retro68 toolchain
+        uses: actions/cache@v4
+        with:
+          path: deps/retro68/Retro68-build
+          # Bump CACHE_VERSION (the trailing v1) to force a clean rebuild
+          # — e.g. after a Retro68 upstream change, since the source is
+          # cloned at HEAD and isn't captured by the key below.
+          key: retro68-${{ runner.os }}-${{ runner.arch }}-${{ env.RETRO68_REF }}-v1-${{ hashFiles('scripts/build-retro68.sh', 'scripts/patches/**', 'Brewfile') }}
+
+      - name: Build Retro68 toolchain (if not cached)
+        run: |
+          GCC=deps/retro68/Retro68-build/toolchain/bin/m68k-apple-macos-gcc
+          if [ -x "$GCC" ]; then
+            echo "Toolchain restored from cache: $("$GCC" --version | head -1)"
+            exit 0
+          fi
+          echo "Cache miss — cloning Retro68 and building the toolchain"
+          mkdir -p deps/retro68
+          if [ ! -d deps/retro68/Retro68/.git ]; then
+            git clone https://github.com/autc04/Retro68.git deps/retro68/Retro68
+            git -C deps/retro68/Retro68 checkout "$RETRO68_REF"
+            git -C deps/retro68/Retro68 submodule update --init --recursive
+          fi
+          # Boost 1.90+ compatibility patch (mirrors scripts/fetch-deps.sh).
+          # Absolute path: git -C cd's into the clone first, so a relative
+          # path would resolve inside the Retro68 tree, not the repo root.
+          PATCH="$GITHUB_WORKSPACE/scripts/patches/retro68-boost-system.patch"
+          if [ -f "$PATCH" ] && ! git -C deps/retro68/Retro68 apply --reverse --check "$PATCH" >/dev/null 2>&1; then
+            echo "Applying Boost 1.90+ system patch"
+            git -C deps/retro68/Retro68 apply "$PATCH"
+          fi
+          scripts/build-retro68.sh
+
+      - name: Build MacDown
+        run: make build
+
+      - name: Package release artifacts
+        run: scripts/release.sh "${{ steps.tag.outputs.version }}"
+
+      - name: Upload artifacts to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          STAGE="release/MacDown-$VERSION"
+          # Only the self-describing formats are attached: .hqx (BinHex)
+          # and .bin (MacBinary) embed type/creator + both forks in the
+          # file's bytes, so they survive GitHub's metadata stripping.
+          # The raw .dsk/.img and the .zip are intentionally omitted —
+          # their type/creator live in Finder metadata that GitHub drops,
+          # leaving them mislabeled on download.
+          ASSETS=()
+          for f in MacDown.hqx MacDown.bin; do
+            [ -f "$STAGE/$f" ] && ASSETS+=("$STAGE/$f")
+          done
+          if [ ${#ASSETS[@]} -eq 0 ]; then
+            echo "::error::No .hqx/.bin artifacts found to upload" >&2
+            exit 1
+          fi
+          echo "Uploading: ${ASSETS[*]}"
+          gh release upload "${{ steps.tag.outputs.tag }}" "${ASSETS[@]}" --clobber
