@@ -5,8 +5,11 @@
 # format: modern users on any OS can unzip it, then route the .bin
 # through MacBinary-aware emulators or transfer the .dsk into Mini vMac.
 #
-# Usage: ./scripts/release.sh [tag]
-#   tag — optional suffix (default: today's date as YYYYMMDD)
+# Every artifact is named MacDown-<version>.<ext> (the app inside the
+# .bin/.hqx/.dsk is still just "MacDown").
+#
+# Usage: ./scripts/release.sh [version]
+#   version — optional (default: the contents of /VERSION)
 
 set -e
 
@@ -14,7 +17,11 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$PROJECT_ROOT/build"
 RELEASE_DIR="$PROJECT_ROOT/release"
 
-TAG="${1:-$(date +%Y%m%d)}"
+TAG="${1:-$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")}"
+if [ -z "$TAG" ]; then
+    echo "error: no version given and $PROJECT_ROOT/VERSION is empty" >&2
+    exit 1
+fi
 NAME="MacDown-$TAG"
 STAGE="$RELEASE_DIR/$NAME"
 
@@ -35,17 +42,17 @@ fi
 echo "==> Staging $NAME/"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp "$BIN" "$STAGE/MacDown.bin"
-cp "$DSK" "$STAGE/MacDown.dsk"
-cp "$IMG" "$STAGE/MacDown.img"
-[ -f "$HQX" ] && cp "$HQX" "$STAGE/MacDown.hqx"
+cp "$BIN" "$STAGE/$NAME.bin"
+cp "$DSK" "$STAGE/$NAME.dsk"
+cp "$IMG" "$STAGE/$NAME.img"
+[ -f "$HQX" ] && cp "$HQX" "$STAGE/$NAME.hqx"
 
 cat > "$STAGE/README.txt" <<EOF
 MacDown — a small Markdown editor for classic Mac OS (System 6.0.8+)
 
 This archive contains two ways to get MacDown onto a classic Mac:
 
-  MacDown.hqx
+  $NAME.hqx
       BinHex 4.0 — text-only, 7-bit ASCII, embeds the file name, type,
       creator, Finder flags, and both forks. The most bulletproof
       classic-Mac transfer format because nothing in the route can
@@ -56,7 +63,7 @@ This archive contains two ways to get MacDown onto a classic Mac:
         to a real MacDown application with the correct type / creator
         / icon in one step.
 
-  MacDown.bin
+  $NAME.bin
       MacBinary II application. Data fork, resource fork, and Finder
       info bundled into a single file. Smaller than .hqx but only
       survives binary-safe transports.
@@ -70,15 +77,15 @@ This archive contains two ways to get MacDown onto a classic Mac:
         type set to 'BINA' on the receiving Mac if the transport
         stripped Finder metadata.
 
-  MacDown.dsk
+  $NAME.dsk
       Raw 800K disk image — bytes only, no Disk Copy header.
 
       Mini vMac / Basilisk II:
         drag-and-drop onto the emulator window, or pass it as a
         command-line argument when launching.
 
-  MacDown.img
-      Disk Copy 4.2 disk image (same disk content as MacDown.dsk, but
+  $NAME.img
+      Disk Copy 4.2 disk image (same disk content as $NAME.dsk, but
       with the 84-byte DC 4.2 header + checksums and type=dCp4).
 
       Real System 6/7 hardware:

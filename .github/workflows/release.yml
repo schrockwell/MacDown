@@ -46,9 +46,17 @@ jobs:
             echo "::error::No release tag could be resolved" >&2
             exit 1
           fi
-          # release.sh names artifacts MacDown-<tag>; drop a leading "v"
-          # so the zip is MacDown-1.0.0.zip, not MacDown-v1.0.0.zip.
-          VERSION="${TAG#v}"
+          # Artifacts are named from the VERSION file (the same source the
+          # About box and 'vers' resource use), not the tag. The tag only
+          # picks which release the assets are uploaded to.
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ -z "$VERSION" ]; then
+            echo "::error::VERSION file is empty" >&2
+            exit 1
+          fi
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::warning::Release tag $TAG doesn't match VERSION ($VERSION); artifacts will be named for $VERSION"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building $TAG (artifact version: $VERSION)"
@@ -108,7 +116,7 @@ jobs:
           # their type/creator live in Finder metadata that GitHub drops,
           # leaving them mislabeled on download.
           ASSETS=()
-          for f in MacDown.hqx MacDown.bin; do
+          for f in "MacDown-$VERSION.hqx" "MacDown-$VERSION.bin"; do
             [ -f "$STAGE/$f" ] && ASSETS+=("$STAGE/$f")
           done
           if [ ${#ASSETS[@]} -eq 0 ]; then
