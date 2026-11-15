@@ -236,11 +236,39 @@ JXA
     focus
     IFS='+' read -ra parts <<< "$1"
     k="${parts[${#parts[@]}-1]}"; mods=("${parts[@]:0:${#parts[@]}-1}")
-    args=()
-    for m in "${mods[@]}"; do args+=("kd:$m"); done
-    if [ ${#k} -eq 1 ]; then args+=("t:$k"); else args+=("kp:$k"); fi
-    for m in "${mods[@]}"; do args+=("ku:$m"); done
-    cliclick "${args[@]}" ;;
+    if [ ${#k} -eq 1 ]; then
+        # Character keys: cliclick holds the modifiers around a typed char.
+        args=()
+        for m in ${mods[@]+"${mods[@]}"}; do args+=("kd:$m"); done
+        args+=("t:$k")
+        for m in ${mods[@]+"${mods[@]}"}; do args+=("ku:$m"); done
+        cliclick "${args[@]}"
+    else
+        # Named keys: Basilisk drops cliclick's instant "kp:" press, but
+        # sees a System Events key code.
+        case "$k" in
+            return) code=36 ;; enter) code=76 ;; esc) code=53 ;; tab) code=48 ;;
+            space) code=49 ;; delete) code=51 ;; fwd-delete) code=117 ;;
+            arrow-up) code=126 ;; arrow-down) code=125 ;;
+            arrow-left) code=123 ;; arrow-right) code=124 ;;
+            home) code=115 ;; end) code=119 ;; page-up) code=116 ;; page-down) code=121 ;;
+            *) die "unknown key '$k'" ;;
+        esac
+        using=""
+        for m in ${mods[@]+"${mods[@]}"}; do
+            case "$m" in
+                cmd) u="command down" ;; shift) u="shift down" ;;
+                alt) u="option down" ;; ctrl) u="control down" ;;
+                *) die "unknown modifier '$m'" ;;
+            esac
+            using="${using:+$using, }$u"
+        done
+        if [ -n "$using" ]; then
+            osascript -e "tell application \"System Events\" to key code $code using {$using}"
+        else
+            osascript -e "tell application \"System Events\" to key code $code"
+        fi
+    fi ;;
 
   type)     # type "some text"
     focus; cliclick "t:$1" ;;

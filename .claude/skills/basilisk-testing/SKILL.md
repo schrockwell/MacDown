@@ -66,7 +66,7 @@ any other hfsutils command, e.g. `$E hfs hls -l ":Docs:"`,
 | `$E dbl x y` | Double-click timed for MacDown's own list (its threshold is 30 ticks). |
 | `$E path x0 y0 x1 y1 ...` | Press at the first point, move through the rest, release at the last: menus and submenus, dragging windows. |
 | `$E press x0 y0 ...` then `$E shot name` then `$E release x y` | Hold a menu open to screenshot it. Release over the desktop to cancel. |
-| `$E key cmd+q` / `key cmd+arrow-up` / `key return` | Key combos (cliclick key names for non-characters). |
+| `$E key cmd+q` / `key cmd+arrow-up` / `key return` | Key combos. Named keys (return, esc, tab, delete, arrows, ...) go through System Events key codes; Basilisk drops cliclick's instant key presses. |
 | `$E type "text"` | Type text. |
 
 Every input command first brings Basilisk II to the front and **aborts if
@@ -94,6 +94,10 @@ Startup Items (`install`) and just `wait` + `shot`. No input is needed.
 - **Instant clicks get dropped.** Basilisk needs to see the pointer arrive
   before the button goes down, and a short hold. Use the script's commands,
   not raw `cliclick c:`.
+- **Pop-up menus open with the current item under the pointer**, so
+  releasing where you pressed re-picks the same item. Offset the release
+  by 16px per item (Chicago 12 menu rows), or `press` + `shot` first to
+  see where the items landed.
 - **Standard File dialogs** didn't respond reliably to `key return` or to a
   fast double-click. Click the item, then click the Open/Save button.
   Type-to-select (`type Do`) and `key cmd+arrow-up` (parent folder) do work.
