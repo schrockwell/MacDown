@@ -15,6 +15,7 @@
 #include "file_io.h"
 #include "document.h"
 #include "pstr.h"
+#include "prefs.h"
 #include "toolbar_icons.h"
 
 #define kBrowserWindowID  131
@@ -443,7 +444,24 @@ static void BrowserEnsureDefault(void)
 {
     SysEnvRec se;
     short rawWD = 0;
-    if (gFolderID != 0) return;
+
+    if (gFolderID != 0) {
+        /* Already browsing somewhere this session -- keep it unless the
+           folder has since been deleted. */
+        if (PrefsFolderExists(gFolderVRef, gFolderID)) return;
+    } else {
+        /* First show this launch: resume where the last session left
+           off, if that folder still exists. */
+        short v;
+        long  d;
+        if (PrefsGetBrowserFolder(&v, &d)) {
+            gFolderVRef = v;
+            gFolderID   = d;
+            gFolderName[0] = 0;
+            return;
+        }
+    }
+
     if (SysEnvirons(2, &se) == noErr) {
         rawWD = se.sysVRefNum;
     } else {
@@ -1106,6 +1124,14 @@ void BrowserIdle(void)
        starts at top (BrowserLoadCurrent zeroes gTopIdx). */
     BrowserLoadCurrent();
     BrowserDrawList();
+}
+
+Boolean BrowserLastFolder(short *outVRef, long *outDirID)
+{
+    if (gFolderID == 0) return false;
+    if (outVRef)  *outVRef  = gFolderVRef;
+    if (outDirID) *outDirID = gFolderID;
+    return true;
 }
 
 Boolean BrowserCurrentFolder(short *outVRef, long *outDirID)

@@ -60,6 +60,9 @@ OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
 OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
                      const char *data, long len, LineEndKind le);
 
+/* True if a file (not a folder) named `name` exists in (vRefNum, dirID). */
+Boolean FileIOFileExists(short vRefNum, long dirID, ConstStr255Param name);
+
 /* Set Finder type/creator on a freshly-saved file. */
 OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
                               OSType type, OSType creator);

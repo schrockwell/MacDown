@@ -58,6 +58,11 @@ DocState *DocActive(void); /* DocFromWindow(FrontWindow()) */
    matching against HFS catalog data don't have to normalize. */
 DocState *DocFindOpenFile(short vRefNum, long dirID, ConstStr255Param name);
 
+/* File > Open Recent submenu. RebuildRecentMenu syncs it with the
+   prefs list; DocOpenRecent handles a pick (1-based item number). */
+void RebuildRecentMenu(void);
+void DocOpenRecent(short menuItem);
+
 /* Windows menu. */
 void RebuildWindowsMenu(void);
 void DocSelectFromMenu(short menuItem); /* 1-based into dynamic doc items */

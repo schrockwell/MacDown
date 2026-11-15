@@ -42,6 +42,11 @@ resource 'MENU' (129, "File") {
     {
         "New",                    noIcon, "N",    noMark, plain;
         "Open\0xC9",              noIcon, "O",    noMark, plain;
+        /* Submenu: key byte 0x1B marks a hierarchical item and the
+           mark byte is the submenu's MENU ID (134). Written as a
+           literal -- Multiversal's `hierarchicalMenu` constant is
+           defined as "\0x$1B", which Rez compiles to 0x01. */
+        "Open Recent",            noIcon, "\0x1B", "\0x86", plain;
         "-",                      noIcon, noKey,  noMark, plain;
         "Close",                  noIcon, "W",    noMark, plain;
         "Close All",              noIcon, noKey,  noMark, plain;
@@ -97,6 +102,17 @@ resource 'MENU' (133, "Line") {
         "-",                          noIcon, noKey,  noMark, plain;
         "Indent",                     noIcon, "]",    noMark, plain;
         "Outdent",                    noIcon, "[",    noMark, plain;
+    }
+};
+
+/* File > Open Recent submenu. Not in the MBAR -- inserted as a
+   hierarchical menu at startup and rebuilt by RebuildRecentMenu() in
+   src/document.c (one item per recent file, separator, Clear Menu). */
+resource 'MENU' (134, "Open Recent") {
+    134, textMenuProc, allEnabled, enabled,
+    "Open Recent",
+    {
+        "Clear Menu",                 noIcon, noKey,  noMark, plain;
     }
 };
 
@@ -304,6 +320,7 @@ resource 'STR#' (128, "Errors") {
         "Couldn\0xD5t save the file.";
         "Couldn\0xD5t create the file.";
         "Too many documents open. Close one and try again.";
+        "That file couldn\0xD5t be found. It\0xD5s been removed from Open Recent.";
     }
 };
 

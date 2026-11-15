@@ -19,6 +19,7 @@
 #include "browser.h"
 #include "markdown.h"
 #include "apple_events.h"
+#include "prefs.h"
 
 #define kMenuBarID 128
 #define kAppleMenuID 128
@@ -34,11 +35,14 @@
 
 #define kFileNew 1
 #define kFileOpen 2
-#define kFileClose 4
-#define kFileCloseAll 5
-#define kFileSave 6
-#define kFileSaveAs 7
-#define kFileQuit 9
+#define kFileOpenRecent 3 /* hierarchical: submenu kRecentMenuID */
+#define kFileClose 5
+#define kFileCloseAll 6
+#define kFileSave 7
+#define kFileSaveAs 8
+#define kFileQuit 10
+
+#define kRecentMenuID 134
 
 #define kEditUndo 1
 #define kEditCut 3
@@ -128,10 +132,20 @@ static void Initialize(void)
     SetMenuBar(menuBar);
     AppendResMenu(GetMenuHandle(kAppleMenuID), 'DRVR');
     DisableItem(GetMenuHandle(kEditMenuID), kEditUndo);
+    /* File > Open Recent submenu (hierMenu = -1: not in the menu bar). */
+    {
+        MenuHandle recent = GetMenu(kRecentMenuID);
+        if (recent != NULL)
+            InsertMenu(recent, -1);
+    }
     DrawMenuBar();
 
     AEInit();
     DocAppInit();
+    /* Before any document opens, so launch-time opens land in Open
+       Recent and the saved folders are available. */
+    PrefsLoad();
+    RebuildRecentMenu();
 }
 
 /* System 6 launch-with-files: open every dropped file. DocOpen owns
@@ -1087,6 +1101,21 @@ static void DoFileOpen(void)
     GetPort(&savedPort);
     InitCursor();
 
+    /* Start in the folder a file was last opened from (this session or
+       a previous one). SFGetFile reads its starting location from the
+       SFSaveDisk (negated vRefNum) and CurDirStore (dirID) globals. If
+       that folder is gone, leave them alone and let Standard File use
+       its own default. */
+    {
+        short vRef;
+        long  dirID;
+        if (PrefsGetOpenFolder(&vRef, &dirID))
+        {
+            LMSetSFSaveDisk(-vRef);
+            LMSetCurDirStore(dirID);
+        }
+    }
+
     where.h = 80;
     where.v = 60;
     SFGetFile(where, "\p", NULL, 1, types, NULL, &reply);
@@ -1099,6 +1128,12 @@ static void DoFileOpen(void)
 
     if (!reply.good)
         return;
+    {
+        short vRef;
+        long  dirID;
+        if (FileIOResolveWD(reply.vRefNum, &vRef, &dirID) == noErr)
+            PrefsSetOpenFolder(vRef, dirID);
+    }
     DocOpen(reply.vRefNum, reply.fName);
 }
 
@@ -1289,6 +1324,10 @@ static void HandleMenu(long mResult)
         }
         break;
 
+    case kRecentMenuID:
+        DocOpenRecent(item);
+        break;
+
     case kWindowsMenuID:
         if (item == kWindowsMenuNext)
             DocCycleWindow();
@@ -1387,6 +1426,16 @@ int main(void)
             DocAdjustCursor();
         }
     }
+
+    /* Remember where the browser was, then write prefs (browser and
+       Open-dialog folders, Open Recent list). */
+    {
+        short vRef;
+        long  dirID;
+        if (BrowserLastFolder(&vRef, &dirID))
+            PrefsSetBrowserFolder(vRef, dirID);
+    }
+    PrefsSave();
 
     return 0;
 }

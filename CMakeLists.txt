@@ -68,6 +68,7 @@ add_application(MacDown
     src/markdown.c
     src/pstr.c
     src/apple_events.c
+    src/prefs.c
     resources/MacDown.r
     CREATOR MDED
 )

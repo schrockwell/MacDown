@@ -18,6 +18,7 @@
 #include "browser.h"
 #include "pstr.h"
 #include "file_io.h"
+#include "prefs.h"
 
 #define kWindowID 128
 #define kSaveChangesALRT 129
@@ -33,11 +34,14 @@
 
 #define kUndoMenuID 130
 #define kUndoMenuItem 1
+#define kErrRecentMissing 7
 #define kFileMenuID 129
-#define kFileMenuClose    4
-#define kFileMenuCloseAll 5
-#define kFileMenuSave     6
-#define kFileMenuSaveAs   7
+#define kFileMenuOpenRecent 3
+#define kFileMenuClose    5
+#define kFileMenuCloseAll 6
+#define kFileMenuSave     7
+#define kFileMenuSaveAs   8
+#define kRecentMenuID 134
 #define kWindowsMenuID 132
 #define kWindowsMenuStaticItems 3 /* Next, Browser, separator */
 
@@ -52,6 +56,7 @@ void SyncFileMenuEnables(void);
 static void YieldOnce(void);
 static void ClearDocText(DocState *doc);
 static DocState *FindEmptyUntitledDoc(void);
+static void NoteRecentFile(short wdRefNum, ConstStr255Param name);
 
 /* ---- helpers ---- */
 
@@ -576,9 +581,92 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 
     InitCursor();
 
+    NoteRecentFile(ownedWD, name);
+
     if (folded > 0)
         ShowError(kErrFolded);
     return true;
+}
+
+/* ---- File > Open Recent ---- */
+
+/* Record a successfully opened/saved file at the top of Open Recent. */
+static void NoteRecentFile(short wdRefNum, ConstStr255Param name)
+{
+    short vRef;
+    long  dirID;
+    if (FileIOResolveWD(wdRefNum, &vRef, &dirID) != noErr)
+        return;
+    PrefsRecentAdd(vRef, dirID, name);
+    RebuildRecentMenu();
+}
+
+/* One item per recent file (newest first), a separator, Clear Menu.
+   Item text is set with SetMenuItemText so names containing menu
+   metacharacters ( ; / ( - ^ ! < ) show up literally. The File menu's
+   Open Recent item is greyed out when the list is empty. */
+void RebuildRecentMenu(void)
+{
+    MenuHandle m = GetMenuHandle(kRecentMenuID);
+    MenuHandle fileMenu = GetMenuHandle(kFileMenuID);
+    short count = PrefsRecentCount();
+    short i;
+
+    if (m == NULL)
+        return;
+    for (i = CountMItems(m); i > 0; i--)
+        DeleteMenuItem(m, i);
+
+    for (i = 0; i < count; i++)
+    {
+        Str255 name;
+        PrefsRecentName(i, name);
+        AppendMenu(m, "\px");
+        SetMenuItemText(m, i + 1, name);
+    }
+    if (count > 0)
+        AppendMenu(m, "\p(-");
+    AppendMenu(m, "\pClear Menu");
+
+    if (fileMenu != NULL)
+    {
+        if (count > 0)
+            EnableItem(fileMenu, kFileMenuOpenRecent);
+        else
+            DisableItem(fileMenu, kFileMenuOpenRecent);
+    }
+}
+
+void DocOpenRecent(short menuItem)
+{
+    short count = PrefsRecentCount();
+    short vRef;
+    long  dirID;
+    Str255 name;
+
+    if (menuItem >= 1 && menuItem <= count)
+    {
+        if (PrefsRecentGet(menuItem - 1, &vRef, &dirID, name)
+            && FileIOFileExists(vRef, dirID, name))
+        {
+            DocOpenFromDir(vRef, dirID, name);
+        }
+        else
+        {
+            /* Volume not mounted, folder gone, or file deleted/renamed. */
+            PrefsRecentRemove(menuItem - 1);
+            RebuildRecentMenu();
+            ShowError(kErrRecentMissing);
+        }
+        return;
+    }
+
+    /* Last item is always Clear Menu. */
+    if (menuItem == CountMItems(GetMenuHandle(kRecentMenuID)))
+    {
+        PrefsRecentClear();
+        RebuildRecentMenu();
+    }
 }
 
 /* Take any folder ref (a wdRefNum from Standard File / AppFile, or
@@ -768,7 +856,10 @@ Boolean DocSaveAs(DocState *doc)
     PStrCopy(doc->fileName, reply.fName);
     doc->hasFile = true;
 
-    return DocSave(doc);
+    if (!DocSave(doc))
+        return false;
+    NoteRecentFile(doc->vRefNum, doc->fileName);
+    return true;
 }
 
 Boolean DocPromptSaveIfDirty(DocState *doc)

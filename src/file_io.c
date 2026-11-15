@@ -3,6 +3,8 @@
 #include <Files.h>
 #include <Memory.h>
 
+#include "pstr.h"
+
 #define UC(c) ((unsigned char)(c))
 
 /* ---- Helpers ---- */
@@ -367,4 +369,19 @@ OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
     pb.fileParam.ioFVersNum  = 0;
     pb.fileParam.ioFDirIndex = 0;
     return PBSetFInfoSync(&pb);
+}
+
+Boolean FileIOFileExists(short vRefNum, long dirID, ConstStr255Param name)
+{
+    CInfoPBRec pb;
+    Str63 nm;
+    if (name[0] == 0 || name[0] > 63) return false;
+    PStrCopy(nm, name);   /* PBGetCatInfo may write to ioNamePtr */
+    ZeroStruct(pb);
+    pb.hFileInfo.ioNamePtr   = nm;
+    pb.hFileInfo.ioVRefNum   = vRefNum;
+    pb.hFileInfo.ioFDirIndex = 0;          /* look up by name */
+    pb.hFileInfo.ioDirID     = dirID;
+    if (PBGetCatInfoSync(&pb) != noErr) return false;
+    return (pb.hFileInfo.ioFlAttrib & 0x10) == 0;   /* not a directory */
 }

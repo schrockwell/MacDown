@@ -43,4 +43,9 @@ void BrowserIdle(void);
    Save dialog to default to the browser's directory when present. */
 Boolean BrowserCurrentFolder(short *outVRef, long *outDirID);
 
+/* The folder the browser shows (or last showed) this session, open or
+   not. False if the browser hasn't been opened yet. Saved to prefs at
+   quit. */
+Boolean BrowserLastFolder(short *outVRef, long *outDirID);
+
 #endif
