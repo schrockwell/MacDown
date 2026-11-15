@@ -59,8 +59,11 @@ static long      gFolderID    = 0;
 static long      gParentDirID = 0;
 static Str63     gFolderName;
 
-/* Transient -- owned only while gWindow is non-NULL. */
-static short     gCurrentWD   = 0;
+/* Window frame (global content rect) to use the next time the window
+   is created: seeded from prefs at launch, updated when it closes. */
+static Rect      gSavedBounds;
+static Boolean   gHaveSavedBounds = false;
+
 
 /* Auto-refresh: the HFS directory mod date bumps when files are added,
    removed, or renamed inside it. We poll it on idle and reload the
@@ -163,6 +166,8 @@ static Rect    BrowserListRect(void);
 static short   BrowserRowsVisible(void);
 static void    BrowserAdjustScrollBar(void);
 static pascal void BrowserScrollAction(ControlHandle ctl, short part);
+static Boolean WindowGlobalBounds(WindowPtr w, Rect *out);
+static Boolean BoundsAreUsable(const Rect *r);
 
 /* ---- helpers ---- */
 
@@ -825,13 +830,10 @@ static void BrowserDrawList(void)
 
 static void BrowserNavigateTo(short vRefNum, long dirID)
 {
-    short ownedWD;
-    if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr) {
+    if (!PrefsFolderExists(vRefNum, dirID)) {
         SysBeep(1);
         return;
     }
-    if (gCurrentWD != 0) FileIOReleaseWD(gCurrentWD);
-    gCurrentWD  = ownedWD;
     gFolderVRef = vRefNum;
     gFolderID   = dirID;
     BrowserLoadCurrent();
@@ -879,16 +881,20 @@ void BrowserShow(void)
            remembered location (gFolderVRef / gFolderID) or the boot
            volume's root if we've never been opened. */
         BrowserEnsureDefault();
-        if (FileIOOwnWDFromDir(gFolderVRef, gFolderID, &gCurrentWD) != noErr) {
-            SysBeep(1);
-            return;
-        }
         gWindow = GetNewWindow(kBrowserWindowID, NULL, (WindowPtr)-1L);
-        if (gWindow == NULL) {
-            FileIOReleaseWD(gCurrentWD); gCurrentWD = 0;
+        if (gWindow == NULL)
             return;
-        }
         SetPort(gWindow);
+
+        /* Put it back where it was (WIND 131 is created invisible, so
+           this doesn't flash at the default spot first). Skipped if the
+           saved frame's title bar wouldn't be reachable on the current
+           screens, e.g. after switching to a smaller monitor. */
+        if (gHaveSavedBounds && BoundsAreUsable(&gSavedBounds)) {
+            MoveWindow(gWindow, gSavedBounds.left, gSavedBounds.top, false);
+            SizeWindow(gWindow, gSavedBounds.right - gSavedBounds.left,
+                       gSavedBounds.bottom - gSavedBounds.top, false);
+        }
 
         /* Top-strip button rects. Custom drawn (not Control Manager)
            so we can set Geneva 9 and have them repaint via our own
@@ -939,6 +945,7 @@ void BrowserToggle(void)
 void BrowserClose(void)
 {
     if (gWindow == NULL) return;
+    gHaveSavedBounds = WindowGlobalBounds(gWindow, &gSavedBounds);
     /* DisposeWindow disposes child controls automatically. The
        persistent gFolderVRef/gFolderID/gFolderName are intentionally
        NOT cleared so the next BrowserShow drops the user back where
@@ -947,7 +954,6 @@ void BrowserClose(void)
     gWindow = NULL;
     gScrollBar = NULL;
     if (gEntries) { DisposeHandle(gEntries); gEntries = NULL; }
-    if (gCurrentWD != 0) { FileIOReleaseWD(gCurrentWD); gCurrentWD = 0; }
     gNumEntries  = 0;
     gSelectedIdx = -1;
     gTopIdx      = 0;
@@ -1124,6 +1130,59 @@ void BrowserIdle(void)
        starts at top (BrowserLoadCurrent zeroes gTopIdx). */
     BrowserLoadCurrent();
     BrowserDrawList();
+}
+
+/* Content rect of `w` in global coordinates. */
+static Boolean WindowGlobalBounds(WindowPtr w, Rect *out)
+{
+    GrafPtr saved;
+    Point tl;
+    if (w == NULL) return false;
+    GetPort(&saved);
+    SetPort(w);
+    tl.h = w->portRect.left;
+    tl.v = w->portRect.top;
+    LocalToGlobal(&tl);
+    SetPort(saved);
+    out->left   = tl.h;
+    out->top    = tl.v;
+    out->right  = tl.h + (w->portRect.right - w->portRect.left);
+    out->bottom = tl.v + (w->portRect.bottom - w->portRect.top);
+    return true;
+}
+
+/* A saved frame is usable if it's at least the minimum browser size and
+   a decent chunk of its title bar lands on some screen below the menu
+   bar, so the user can always drag it. */
+static Boolean BoundsAreUsable(const Rect *r)
+{
+    Rect titleBar, desk, hit;
+    RgnHandle gray = LMGetGrayRgn();
+    if (r->right - r->left < 140 || r->bottom - r->top < 160) return false;
+    if (gray == NULL) return false;
+    desk = (**gray).rgnBBox;
+    SetRect(&titleBar, r->left + 8, r->top - 16, r->right - 8, r->top - 2);
+    if (!SectRect(&titleBar, &desk, &hit)) return false;
+    if (hit.right - hit.left < 32) return false;
+    return RectInRgn(&titleBar, gray);
+}
+
+void BrowserSetSavedBounds(const Rect *globalBounds)
+{
+    gSavedBounds = *globalBounds;
+    gHaveSavedBounds = true;
+}
+
+Boolean BrowserGetWindowState(Boolean *outVisible, Rect *outGlobalBounds)
+{
+    *outVisible = (gWindow != NULL && ((WindowPeek)gWindow)->visible);
+    if (gWindow != NULL)
+        return WindowGlobalBounds(gWindow, outGlobalBounds);
+    if (gHaveSavedBounds) {
+        *outGlobalBounds = gSavedBounds;
+        return true;
+    }
+    return false;
 }
 
 Boolean BrowserLastFolder(short *outVRef, long *outDirID)

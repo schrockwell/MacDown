@@ -56,7 +56,7 @@ void SyncFileMenuEnables(void);
 static void YieldOnce(void);
 static void ClearDocText(DocState *doc);
 static DocState *FindEmptyUntitledDoc(void);
-static void NoteRecentFile(short wdRefNum, ConstStr255Param name);
+static void NoteRecentFile(short vRefNum, long dirID, ConstStr255Param name);
 
 /* ---- helpers ---- */
 
@@ -418,13 +418,10 @@ static DocState *FindEmptyUntitledDoc(void)
     return NULL;
 }
 
-Boolean DocClose(DocState *doc)
+/* Tear down a document without asking about unsaved changes. */
+static void DocDispose(DocState *doc)
 {
     DocState **link;
-    if (doc == NULL)
-        return true;
-    if (!DocPromptSaveIfDirty(doc))
-        return false;
 
     /* Remove from list. */
     for (link = &gDocs; *link != NULL; link = &(*link)->next)
@@ -437,8 +434,6 @@ Boolean DocClose(DocState *doc)
     }
 
     DocClearUndo(doc);
-    if (doc->hasFile)
-        FileIOReleaseWD(doc->vRefNum);
     if (doc->te)
         TEDispose(doc->te);
     if (doc->window)
@@ -446,6 +441,63 @@ Boolean DocClose(DocState *doc)
     DisposePtr((Ptr)doc);
     RebuildWindowsMenu();
     SyncFileMenuEnables();
+}
+
+Boolean DocClose(DocState *doc)
+{
+    if (doc == NULL)
+        return true;
+    if (!DocPromptSaveIfDirty(doc))
+        return false;
+    DocDispose(doc);
+    return true;
+}
+
+/* The frontmost document window (document windows are always visible,
+   so walking from FrontWindow covers them all). */
+static DocState *FrontmostDoc(void)
+{
+    WindowPeek w = (WindowPeek)FrontWindow();
+    while (w != NULL)
+    {
+        DocState *d = DocFromWindow((WindowPtr)w);
+        if (d != NULL)
+            return d;
+        w = w->nextWindow;
+    }
+    return NULL;
+}
+
+Boolean DocCloseAllForQuit(void)
+{
+    short vRefs[kPrefsMaxOpenDocs];
+    long  dirIDs[kPrefsMaxOpenDocs];
+    Str63 names[kPrefsMaxOpenDocs];
+    short n = 0;
+    short i;
+    DocState *doc;
+
+    /* Front to back, so the save prompts come up in window order. Each
+       doc is recorded after its prompt, so an untitled doc saved in
+       response to "Save changes?" is remembered too. */
+    while ((doc = FrontmostDoc()) != NULL)
+    {
+        if (!DocPromptSaveIfDirty(doc))
+            return false;   /* quit cancelled: keep the old session */
+        if (doc->hasFile && n < kPrefsMaxOpenDocs)
+        {
+            vRefs[n]  = doc->vRefNum;
+            dirIDs[n] = doc->dirID;
+            PStrCopy(names[n], doc->fileName);
+            n++;
+        }
+        DocDispose(doc);
+    }
+
+    /* Stored back to front: reopening in order restores the stacking. */
+    PrefsOpenDocsClear();
+    for (i = n - 1; i >= 0; i--)
+        PrefsOpenDocsAdd(vRefs[i], dirIDs[i], names[i]);
     return true;
 }
 
@@ -494,7 +546,10 @@ static void ClearDocText(DocState *doc)
     doc->dirtyLineStart = doc->dirtyLineEnd = -1;
 }
 
-static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
+/* quiet: session restore -- no alerts for files that can't be read,
+   and don't reshuffle Open Recent. */
+static Boolean DocOpenAt(short vRefNum, long dirID, ConstStr255Param name,
+                         Boolean quiet)
 {
     Handle data = NULL;
     LineEndKind le;
@@ -512,19 +567,19 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     watch = GetCursor(watchCursor);
     if (watch) SetCursor(*watch);
 
-    err = FileIOReadDoc(ownedWD, name, &data, &le, &folded);
+    err = FileIOReadDoc(vRefNum, dirID, name, &data, &le, &folded);
     if (err == -1)
     {
-        FileIOReleaseWD(ownedWD);
         InitCursor();
-        ShowError(kErrTooBig);
+        if (!quiet)
+            ShowError(kErrTooBig);
         return false;
     }
     if (err != noErr)
     {
-        FileIOReleaseWD(ownedWD);
         InitCursor();
-        ShowError(kErrCantOpen);
+        if (!quiet)
+            ShowError(kErrCantOpen);
         return false;
     }
 
@@ -532,9 +587,9 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     if (len > kMdMaxFileBytes)
     {
         DisposeHandle(data);
-        FileIOReleaseWD(ownedWD);
         InitCursor();
-        ShowError(kErrTooBig);
+        if (!quiet)
+            ShowError(kErrTooBig);
         return false;
     }
 
@@ -546,15 +601,10 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
         if (doc == NULL)
         {
             DisposeHandle(data);
-            FileIOReleaseWD(ownedWD);
             InitCursor();
             return false;
         }
     }
-
-    /* If reused, release the old doc's wdRefNum before stomping it. */
-    if (reusedEmpty && doc->hasFile)
-        FileIOReleaseWD(doc->vRefNum);
 
     ClearDocText(doc);
     HLock(data);
@@ -563,7 +613,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
     DisposeHandle(data);
 
     doc->hasFile = true;
-    doc->vRefNum = ownedWD;
+    doc->vRefNum = vRefNum;
+    doc->dirID = dirID;
     PStrCopy(doc->fileName, name);
     doc->leKind = le;
     doc->dirty = false;
@@ -581,7 +632,8 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 
     InitCursor();
 
-    NoteRecentFile(ownedWD, name);
+    if (!quiet)
+        NoteRecentFile(vRefNum, dirID, name);
 
     if (folded > 0)
         ShowError(kErrFolded);
@@ -591,13 +643,9 @@ static Boolean DocOpenWithOwnedWD(short ownedWD, ConstStr255Param name)
 /* ---- File > Open Recent ---- */
 
 /* Record a successfully opened/saved file at the top of Open Recent. */
-static void NoteRecentFile(short wdRefNum, ConstStr255Param name)
+static void NoteRecentFile(short vRefNum, long dirID, ConstStr255Param name)
 {
-    short vRef;
-    long  dirID;
-    if (FileIOResolveWD(wdRefNum, &vRef, &dirID) != noErr)
-        return;
-    PrefsRecentAdd(vRef, dirID, name);
+    PrefsRecentAdd(vRefNum, dirID, name);
     RebuildRecentMenu();
 }
 
@@ -680,13 +728,10 @@ DocState *DocFindOpenFile(short vRefNum, long dirID, ConstStr255Param name)
 {
     DocState *d;
     for (d = gDocs; d != NULL; d = d->next) {
-        short dVRef;
-        long  dDirID;
         short i;
         Boolean equal;
         if (!d->hasFile) continue;
-        if (FileIOResolveWD(d->vRefNum, &dVRef, &dDirID) != noErr) continue;
-        if (dVRef != vRefNum || dDirID != dirID) continue;
+        if (d->vRefNum != vRefNum || d->dirID != dirID) continue;
         if (d->fileName[0] != name[0]) continue;
         equal = true;
         for (i = 1; i <= name[0]; i++) {
@@ -701,44 +746,40 @@ DocState *DocFindOpenFile(short vRefNum, long dirID, ConstStr255Param name)
     return NULL;
 }
 
-Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
+static Boolean OpenFromDir(short vRefNum, long dirID, ConstStr255Param name,
+                           Boolean quiet)
 {
-    short ownedWD;
-    short vRef;
-    long  dirID;
-
     /* If the file is already open in another window, just raise that
        window -- don't create a duplicate. */
-    if (FileIOResolveWD(anyWDRefNum, &vRef, &dirID) == noErr) {
-        DocState *existing = DocFindOpenFile(vRef, dirID, name);
-        if (existing) { SelectWindow(existing->window); return true; }
-    }
-
-    if (FileIOOwnWD(anyWDRefNum, &ownedWD) != noErr)
-    {
-        ShowError(kErrCantOpen);
-        return false;
-    }
-    return DocOpenWithOwnedWD(ownedWD, name);
+    DocState *existing = DocFindOpenFile(vRefNum, dirID, name);
+    if (existing) { SelectWindow(existing->window); return true; }
+    return DocOpenAt(vRefNum, dirID, name, quiet);
 }
 
-/* FSSpec callers (Apple Event 'odoc') already have a real (vRefNum,
-   parID) pair — open our own wdRefNum directly from those. */
-Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
+/* Standard File / AppFiles hand us a wdRefNum: resolve it to the real
+   (volume, dirID) immediately -- we never keep wdRefNums around. */
+Boolean DocOpen(short anyWDRefNum, ConstStr255Param name)
 {
-    short ownedWD;
-
-    {
-        DocState *existing = DocFindOpenFile(vRefNum, dirID, name);
-        if (existing) { SelectWindow(existing->window); return true; }
-    }
-
-    if (FileIOOwnWDFromDir(vRefNum, dirID, &ownedWD) != noErr)
+    short vRef;
+    long  dirID;
+    if (FileIOResolveWD(anyWDRefNum, &vRef, &dirID) != noErr)
     {
         ShowError(kErrCantOpen);
         return false;
     }
-    return DocOpenWithOwnedWD(ownedWD, name);
+    return OpenFromDir(vRef, dirID, name, false);
+}
+
+Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
+{
+    return OpenFromDir(vRefNum, dirID, name, false);
+}
+
+Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name)
+{
+    if (!FileIOFileExists(vRefNum, dirID, name))
+        return false;
+    return OpenFromDir(vRefNum, dirID, name, true);
 }
 
 Boolean DocSave(DocState *doc)
@@ -769,7 +810,8 @@ Boolean DocSave(DocState *doc)
         HUnlock((Handle)ch);
     }
 
-    err = FileIOWriteDoc(doc->vRefNum, doc->fileName, *copy, len, doc->leKind);
+    err = FileIOWriteDoc(doc->vRefNum, doc->dirID, doc->fileName, *copy, len,
+                         doc->leKind);
 
     HUnlock(copy);
     DisposeHandle(copy);
@@ -780,7 +822,8 @@ Boolean DocSave(DocState *doc)
         return false;
     }
 
-    FileIOSetTypeAndCreator(doc->vRefNum, doc->fileName, 'TEXT', 'MDED');
+    FileIOSetTypeAndCreator(doc->vRefNum, doc->dirID, doc->fileName,
+                            'TEXT', 'MDED');
     doc->dirty = false;
     /* Save is a checkpoint — next keystroke begins a new typing burst
        so undo doesn't quietly reach back across the save. */
@@ -838,19 +881,18 @@ Boolean DocSaveAs(DocState *doc)
     if (!reply.good)
         return false;
 
-    /* Own a wdRefNum for the chosen folder so the slot can't be
-       recycled out from under us between this save and the next. */
+    /* Standard File's wdRefNum is only good for now: keep the real
+       (volume, dirID) instead. */
     {
-        short ownedWD;
-        OSErr err = FileIOOwnWD(reply.vRefNum, &ownedWD);
-        if (err != noErr)
+        short vRef;
+        long  dirID;
+        if (FileIOResolveWD(reply.vRefNum, &vRef, &dirID) != noErr)
         {
             ShowError(kErrCantSave);
             return false;
         }
-        if (doc->hasFile)
-            FileIOReleaseWD(doc->vRefNum);
-        doc->vRefNum = ownedWD;
+        doc->vRefNum = vRef;
+        doc->dirID   = dirID;
     }
 
     PStrCopy(doc->fileName, reply.fName);
@@ -858,7 +900,7 @@ Boolean DocSaveAs(DocState *doc)
 
     if (!DocSave(doc))
         return false;
-    NoteRecentFile(doc->vRefNum, doc->fileName);
+    NoteRecentFile(doc->vRefNum, doc->dirID, doc->fileName);
     return true;
 }
 

@@ -17,7 +17,8 @@ struct DocState
     WindowPtr window;
     TEHandle te;
     ControlHandle vScroll;
-    short vRefNum;  /* OWNED wdRefNum (via FileIOOwnWD) */
+    short vRefNum;  /* real volume refNum (never a wdRefNum) */
+    long dirID;     /* folder holding the file */
     Str63 fileName; /* empty if !hasFile */
     Boolean hasFile;
     Boolean dirty;
@@ -43,11 +44,17 @@ void DocAppInit(void);  /* one-time module init */
 DocState *DocNew(void); /* create + show new empty doc */
 Boolean DocOpen(short anyWDRefNum, ConstStr255Param name);
 Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name);
+/* Session restore: no alerts if the file is missing or unreadable, and
+   Open Recent is left alone. Returns false if nothing was opened. */
+Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name);
 Boolean DocSave(DocState *doc);
 Boolean DocSaveAs(DocState *doc);
 Boolean DocPromptSaveIfDirty(DocState *doc); /* true = ok to proceed */
 Boolean DocClose(DocState *doc);             /* dispose window + doc; remove from list */
 Boolean DocCloseAll(void);                   /* prompt-and-close every doc; false if user cancelled */
+/* Quit path: like DocCloseAll, but also records the documents that
+   were open (window order) in prefs for session restore. */
+Boolean DocCloseAllForQuit(void);
 
 /* Lookup. */
 DocState *DocFromWindow(WindowPtr w);

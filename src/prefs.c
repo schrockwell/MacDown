@@ -4,6 +4,7 @@
 #include <Gestalt.h>
 #include <OSUtils.h>
 #include <Multiverse.h>
+#include <stddef.h>
 
 #include "file_io.h"
 #include "pstr.h"
@@ -19,7 +20,7 @@
 #endif
 
 #define kPrefsMagic   'MDpf'
-#define kPrefsVersion 1
+#define kPrefsVersion 2
 #define kPrefsType    'pref'
 #define kPrefsCreator 'MDED'
 
@@ -46,7 +47,18 @@ typedef struct {
     StoredFolder browserFolder;
     short        recentCount;
     StoredFile   recent[kPrefsMaxRecent];
+    /* ---- version 2 ---- (version 1 files end here) */
+    Boolean      restoreSession;   /* reopen docs + browser at launch */
+    Boolean      browserOpen;      /* browser was showing at last quit */
+    Boolean      browserBoundsValid;
+    char         pad2;
+    Rect         browserBounds;    /* global content rect */
+    short        openDocCount;     /* back-to-front window order */
+    StoredFile   openDocs[kPrefsMaxOpenDocs];
 } PrefsRecord;
+
+/* Bytes a version 1 prefs file holds (a prefix of the v2 layout). */
+#define kPrefsV1Size offsetof(PrefsRecord, restoreSession)
 
 static PrefsRecord gPrefs;
 
@@ -153,7 +165,7 @@ static Boolean FindPrefsFolder(short *outVRef, long *outDirID)
 
 void PrefsLoad(void)
 {
-    short vRef, wd, refNum;
+    short vRef, refNum;
     long  dirID, count;
     PrefsRecord rec;
     OSErr err;
@@ -161,50 +173,55 @@ void PrefsLoad(void)
     ZeroStruct(gPrefs);
     gPrefs.magic   = kPrefsMagic;
     gPrefs.version = kPrefsVersion;
+    gPrefs.restoreSession = true;
 
     if (!FindPrefsFolder(&vRef, &dirID)) return;
-    if (FileIOOwnWDFromDir(vRef, dirID, &wd) != noErr) return;
 
-    err = FSOpen(kPrefsName, wd, &refNum);
-    if (err == noErr) {
-        count = sizeof(rec);
-        err = FSRead(refNum, &count, &rec);
-        FSClose(refNum);
-        if ((err == noErr || err == eofErr) && count == sizeof(rec)
-            && rec.magic == kPrefsMagic && rec.version == kPrefsVersion)
-        {
+    err = FileIOOpen(vRef, dirID, kPrefsName, fsRdPerm, &refNum);
+    if (err != noErr) return;
+    count = sizeof(rec);
+    err = FSRead(refNum, &count, &rec);
+    FSClose(refNum);
+
+    if ((err == noErr || err == eofErr) && rec.magic == kPrefsMagic)
+    {
+        if (rec.version == kPrefsVersion && count == sizeof(rec)) {
             gPrefs = rec;
-            if (gPrefs.recentCount < 0) gPrefs.recentCount = 0;
-            if (gPrefs.recentCount > kPrefsMaxRecent)
-                gPrefs.recentCount = kPrefsMaxRecent;
+        } else if (rec.version == 1 && count >= (long)kPrefsV1Size) {
+            /* Older file: keep its fields, defaults for the rest. */
+            BlockMoveData(&rec, &gPrefs, kPrefsV1Size);
+            gPrefs.version = kPrefsVersion;
         }
+        if (gPrefs.recentCount < 0) gPrefs.recentCount = 0;
+        if (gPrefs.recentCount > kPrefsMaxRecent)
+            gPrefs.recentCount = kPrefsMaxRecent;
+        if (gPrefs.openDocCount < 0) gPrefs.openDocCount = 0;
+        if (gPrefs.openDocCount > kPrefsMaxOpenDocs)
+            gPrefs.openDocCount = kPrefsMaxOpenDocs;
     }
-    FileIOReleaseWD(wd);
 }
 
 void PrefsSave(void)
 {
-    short vRef, wd, refNum;
+    short vRef, refNum;
     long  dirID, count;
     OSErr err;
 
     if (!FindPrefsFolder(&vRef, &dirID)) return;
-    if (FileIOOwnWDFromDir(vRef, dirID, &wd) != noErr) return;
 
-    err = FSOpen(kPrefsName, wd, &refNum);
+    err = FileIOOpen(vRef, dirID, kPrefsName, fsRdWrPerm, &refNum);
     if (err == fnfErr) {
-        if (Create(kPrefsName, wd, kPrefsCreator, kPrefsType) == noErr)
-            err = FSOpen(kPrefsName, wd, &refNum);
+        if (FileIOCreate(vRef, dirID, kPrefsName, kPrefsCreator, kPrefsType) == noErr)
+            err = FileIOOpen(vRef, dirID, kPrefsName, fsRdWrPerm, &refNum);
     }
-    if (err == noErr) {
-        count = sizeof(gPrefs);
-        if (SetEOF(refNum, count) == noErr
-            && SetFPos(refNum, fsFromStart, 0) == noErr)
-            (void)FSWrite(refNum, &count, &gPrefs);
-        FSClose(refNum);
-        (void)FlushVol(NULL, wd);
-    }
-    FileIOReleaseWD(wd);
+    if (err != noErr) return;
+
+    count = sizeof(gPrefs);
+    if (SetEOF(refNum, count) == noErr
+        && SetFPos(refNum, fsFromStart, 0) == noErr)
+        (void)FSWrite(refNum, &count, &gPrefs);
+    FSClose(refNum);
+    (void)FlushVol(NULL, vRef);
 }
 
 /* ---- accessors ---- */
@@ -300,4 +317,67 @@ void PrefsRecentRemove(short index)
 void PrefsRecentClear(void)
 {
     gPrefs.recentCount = 0;
+}
+
+/* ---- session restore ---- */
+
+Boolean PrefsGetRestoreSession(void)
+{
+    return gPrefs.restoreSession;
+}
+
+void PrefsSetRestoreSession(Boolean on)
+{
+    gPrefs.restoreSession = on;
+}
+
+void PrefsOpenDocsClear(void)
+{
+    gPrefs.openDocCount = 0;
+}
+
+void PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name)
+{
+    StoredFile f;
+    if (gPrefs.openDocCount >= kPrefsMaxOpenDocs) return;
+    if (name[0] == 0 || name[0] > 63) return;
+    if (!StoreFolder(vRefNum, dirID, &f.folder)) return;
+    PStrCopy(f.name, name);
+    gPrefs.openDocs[gPrefs.openDocCount++] = f;
+}
+
+short PrefsOpenDocCount(void)
+{
+    return gPrefs.openDocCount;
+}
+
+Boolean PrefsOpenDocGet(short index, short *outVRef, long *outDirID,
+                        StringPtr outName)
+{
+    if (index < 0 || index >= gPrefs.openDocCount) return false;
+    if (!ResolveFolder(&gPrefs.openDocs[index].folder, outVRef, outDirID))
+        return false;
+    PStrCopy(outName, gPrefs.openDocs[index].name);
+    return true;
+}
+
+void PrefsSetBrowserWindow(Boolean open, const Rect *globalBounds)
+{
+    gPrefs.browserOpen = open;
+    if (globalBounds != NULL) {
+        gPrefs.browserBounds = *globalBounds;
+        gPrefs.browserBoundsValid = true;
+    }
+}
+
+Boolean PrefsGetBrowserOpen(void)
+{
+    return gPrefs.browserOpen;
+}
+
+Boolean PrefsGetBrowserBounds(Rect *outGlobalBounds)
+{
+    if (!gPrefs.browserBoundsValid) return false;
+    *outGlobalBounds = gPrefs.browserBounds;
+    return true;
 }

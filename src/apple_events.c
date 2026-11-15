@@ -122,6 +122,6 @@ static pascal OSErr HandleQUIT(const AppleEvent *ev, AppleEvent *reply, long ref
     if (err != noErr) return err;
     /* Walk every doc and prompt for unsaved changes. DocCloseAll
        returns false if the user hits Cancel on any prompt. */
-    if (DocCloseAll()) gQuitRequested = true;
+    if (DocCloseAllForQuit()) gQuitRequested = true;
     return noErr;
 }

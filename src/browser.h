@@ -48,4 +48,11 @@ Boolean BrowserCurrentFolder(short *outVRef, long *outDirID);
    quit. */
 Boolean BrowserLastFolder(short *outVRef, long *outDirID);
 
+/* Window frame persistence. BrowserSetSavedBounds seeds the frame used
+   the next time the window is created (global content rect, from
+   prefs). BrowserGetWindowState reports whether the window is showing
+   and its current (or last) frame; false if there's no frame yet. */
+void    BrowserSetSavedBounds(const Rect *globalBounds);
+Boolean BrowserGetWindowState(Boolean *outVisible, Rect *outGlobalBounds);
+
 #endif

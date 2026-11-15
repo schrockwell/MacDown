@@ -102,59 +102,35 @@ static long FoldAndNormalize(char *buf, long len, LineEndKind le,
     return dst;
 }
 
-/* ---- wdRefNum ownership ----
+/* ---- Folder references ----
 
-   Standard File / 'odoc' Apple Events hand us references to folders.
-   The File Manager's working-directory pool can RECYCLE entries we
-   don't own, so a wdRefNum cached on a document can later point at
-   a different folder and clobber a same-named file there.
+   Documents, prefs and the browser all address files by (real volume
+   refNum, directory ID, name) and use the HFS "PBH" calls directly.
+   We never open or close working directories.
 
-   FileIOOwnWD opens a wdRefNum that *we* own via PBOpenWDSync — the
-   system won't recycle it until we PBCloseWDSync. From that point on
-   every file op uses the classic System-1-era (vRefNum, name) calls
-   that work universally on System 6 / Mini vMac and don't have the
-   reliability problems of the H- or PBH-prefixed variants.
+   An earlier design cached an "owned" wdRefNum per document via
+   PBOpenWD. That doesn't work: on System 7, PBOpenWD hands back the
+   existing working directory for a folder whatever ioWDProcID is
+   passed, and there's no reference count, so the first document to
+   close (or the browser moving on) PBCloseWD'd the folder out from
+   under every other document in it -- their next Save failed with
+   nsvErr, or, once the slot was reused, wrote into another folder.
 
-   Every call gets a DIFFERENT ioWDProcID. PBOpenWD doesn't create a
-   new working directory when one already exists for the same
-   (volume, dirID, procID) -- it hands back the existing wdRefNum, and
-   there's no reference count. With a fixed procID, two documents in
-   the same folder (or a document and the browser) shared one
-   wdRefNum, and the first owner to PBCloseWD it pulled the folder out
-   from under the others. Their next Save then failed (or, once the
-   slot was reused, wrote into some other folder). A unique procID per
-   owner guarantees each owner has its own slot to close. */
+   Every param block is zeroed first. The Multiversal glue for the
+   H calls (HOpen, HCreate, SetFInfo...) leaves fields like ioFVersNum,
+   ioMisc and ioFDirIndex as stack garbage, which is what made those
+   calls look unreliable. */
 
-static unsigned short sNextWDTag = 0;
-
-OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD)
-{
-    WDPBRec pb;
-    OSErr err;
-    ZeroStruct(pb);
-    pb.ioCompletion = NULL;
-    pb.ioNamePtr    = NULL;
-    pb.ioVRefNum    = vRefNum;
-    pb.ioWDDirID    = dirID;
-    /* 'MD' in the high word keeps our slots recognizable; the low word
-       makes each one unique for the session. */
-    pb.ioWDProcID   = (0x4D44L << 16) | (long)(++sNextWDTag); /* 'MD' */
-    err = PBOpenWDSync(&pb);
-    if (err != noErr) return err;
-    if (outOwnedWD) *outOwnedWD = pb.ioVRefNum;
-    return noErr;
-}
-
+/* Standard File replies, AppFiles and SysEnvirons hand us a wdRefNum
+   (or a plain vRefNum); turn it into (volume, dirID) right away while
+   it's still valid. Read-only: opens nothing. */
 OSErr FileIOResolveWD(short anyWDRefNum, short *outVRefNum, long *outDirID)
 {
     WDPBRec pb;
     OSErr err;
-    pb.ioCompletion = NULL;
-    pb.ioNamePtr    = NULL;
-    pb.ioVRefNum    = anyWDRefNum;
-    pb.ioWDIndex    = 0;
-    pb.ioWDProcID   = 0;
-    pb.ioWDVRefNum  = 0;
+    ZeroStruct(pb);
+    pb.ioVRefNum   = anyWDRefNum;
+    pb.ioWDIndex   = 0;
     err = PBGetWDInfoSync(&pb);
     if (err != noErr) return err;
     if (outVRefNum) *outVRefNum = pb.ioWDVRefNum;
@@ -162,55 +138,49 @@ OSErr FileIOResolveWD(short anyWDRefNum, short *outVRefNum, long *outDirID)
     return noErr;
 }
 
-OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD)
-{
-    short realVRef;
-    long  realDirID;
-    OSErr err = FileIOResolveWD(anyWDRefNum, &realVRef, &realDirID);
-    if (err != noErr) return err;
-    return FileIOOwnWDFromDir(realVRef, realDirID, outOwnedWD);
-}
+/* ---- File ops ---- */
 
-void FileIOReleaseWD(short ownedWD)
+OSErr FileIOOpen(short vRefNum, long dirID, ConstStr255Param name,
+                 SignedByte perm, short *outRefNum)
 {
-    WDPBRec pb;
-    if (ownedWD == 0) return;
-    pb.ioCompletion = NULL;
-    pb.ioNamePtr    = NULL;
-    pb.ioVRefNum    = ownedWD;
-    (void) PBCloseWDSync(&pb);
-}
-
-/* ---- File ops ---- Plain non-H calls; the vRefNum is an owned wdRefNum. */
-
-/* Open the data fork with explicit read/write permission. The FSOpen
-   glue asks for fsCurPerm, which quietly hands back a read-only path
-   for a locked file; we'd rather fail at open time with a clear error.
-   The param block is zeroed for the same glue-hygiene reasons as
-   FileIOSetTypeAndCreator below. */
-static OSErr OpenForWrite(short vRefNum, ConstStr255Param name, short *outRefNum)
-{
-    ParamBlockRec pb;
+    HParamBlockRec pb;
     OSErr err;
 
     ZeroStruct(pb);
-    pb.ioParam.ioNamePtr  = (StringPtr)name;
-    pb.ioParam.ioVRefNum  = vRefNum;
-    pb.ioParam.ioPermssn  = fsRdWrPerm;
-    err = PBOpenDFSync(&pb);
+    pb.fileParam.ioNamePtr = (StringPtr)name;
+    pb.fileParam.ioVRefNum = vRefNum;
+    pb.fileParam.ioDirID   = dirID;
+    pb.ioParam.ioPermssn   = perm;
+    err = PBHOpenDFSync(&pb);
     if (err == paramErr) {
         /* OpenDF isn't implemented before System 7. */
         ZeroStruct(pb);
-        pb.ioParam.ioNamePtr  = (StringPtr)name;
-        pb.ioParam.ioVRefNum  = vRefNum;
-        pb.ioParam.ioPermssn  = fsRdWrPerm;
-        err = PBOpenSync(&pb);
+        pb.fileParam.ioNamePtr = (StringPtr)name;
+        pb.fileParam.ioVRefNum = vRefNum;
+        pb.fileParam.ioDirID   = dirID;
+        pb.ioParam.ioPermssn   = perm;
+        err = PBHOpenSync(&pb);
     }
     *outRefNum = (err == noErr) ? pb.ioParam.ioRefNum : 0;
     return err;
 }
 
-OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
+OSErr FileIOCreate(short vRefNum, long dirID, ConstStr255Param name,
+                   OSType creator, OSType type)
+{
+    HParamBlockRec pb;
+    OSErr err;
+
+    ZeroStruct(pb);
+    pb.fileParam.ioNamePtr = (StringPtr)name;
+    pb.fileParam.ioVRefNum = vRefNum;
+    pb.fileParam.ioDirID   = dirID;
+    err = PBHCreateSync(&pb);
+    if (err != noErr) return err;
+    return FileIOSetTypeAndCreator(vRefNum, dirID, name, type, creator);
+}
+
+OSErr FileIOReadDoc(short vRefNum, long dirID, ConstStr255Param name,
                     Handle *outData,
                     LineEndKind *outLE,
                     long *outFoldCount)
@@ -223,7 +193,7 @@ OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
     LineEndKind le;
     long folded;
 
-    err = FSOpen(name, vRefNum, &refNum);
+    err = FileIOOpen(vRefNum, dirID, name, fsRdPerm, &refNum);
     if (err != noErr) return err;
 
     err = GetEOF(refNum, &eof);
@@ -260,7 +230,7 @@ OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
     return noErr;
 }
 
-OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
+OSErr FileIOWriteDoc(short vRefNum, long dirID, ConstStr255Param name,
                      const char *data, long len, LineEndKind le)
 {
     short refNum = 0;
@@ -300,12 +270,14 @@ OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
        Delete-first destroyed the user's only copy whenever the
        subsequent Create/Open/Write failed (disk full, locked disk),
        and it threw away the file's Finder info, creation date and
-       resource fork on every save. Only create when it's missing. */
-    err = OpenForWrite(vRefNum, name, &refNum);
+       resource fork on every save. Only create when it's missing.
+       fsRdWrPerm (not fsCurPerm) so a locked file fails here, cleanly,
+       instead of opening read-only. */
+    err = FileIOOpen(vRefNum, dirID, name, fsRdWrPerm, &refNum);
     if (err == fnfErr) {
-        err = Create(name, vRefNum, 'MDED', 'TEXT');
+        err = FileIOCreate(vRefNum, dirID, name, 'MDED', 'TEXT');
         if (err == noErr)
-            err = OpenForWrite(vRefNum, name, &refNum);
+            err = FileIOOpen(vRefNum, dirID, name, fsRdWrPerm, &refNum);
     }
     if (err != noErr) {
         refNum = 0;
@@ -337,38 +309,35 @@ done:
     return err;
 }
 
-OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
+OSErr FileIOSetTypeAndCreator(short vRefNum, long dirID, ConstStr255Param name,
                               OSType type, OSType creator)
 {
-    ParamBlockRec pb;
+    HParamBlockRec pb;
     OSErr err;
 
-    /* The Multiversal Interfaces `SetFInfo` glue doesn't clear
-       ioFDirIndex before calling PBGetFInfoSync. If the stack has
-       nonzero garbage there, PBGetFInfoSync does an *indexed* lookup,
-       returns a random file's FInfo, AND overwrites the caller's name
-       buffer (ioNamePtr) with the indexed file's name — clobbering
-       doc->fileName and then setting the type/creator on the wrong
-       file. We bypass the glue and zero the whole block first. */
+    /* Zeroed so ioFDirIndex is 0 (look up by NAME). With stack garbage
+       there -- as the Multiversal SetFInfo glue leaves it -- the call
+       does an indexed lookup, returns some other file's info and
+       overwrites the caller's name buffer. */
     ZeroStruct(pb);
     pb.fileParam.ioNamePtr   = (StringPtr)name;
     pb.fileParam.ioVRefNum   = vRefNum;
-    pb.fileParam.ioFVersNum  = 0;
-    pb.fileParam.ioFDirIndex = 0;   /* lookup by NAME, not by index */
-    err = PBGetFInfoSync(&pb);
+    pb.fileParam.ioDirID     = dirID;
+    pb.fileParam.ioFDirIndex = 0;
+    err = PBHGetFInfoSync(&pb);
     if (err != noErr) return err;
 
     pb.fileParam.ioFlFndrInfo.fdType    = type;
     pb.fileParam.ioFlFndrInfo.fdCreator = creator;
 
-    /* Restore fields PBGetFInfoSync may have clobbered before the
-       set call. ioNamePtr in particular gets overwritten on indexed
-       lookups; we always restore as defense in depth. */
+    /* PBHGetFInfo returns the file number in ioDirID; put the folder
+       back (and re-assert the rest) before the set call. */
     pb.fileParam.ioNamePtr   = (StringPtr)name;
     pb.fileParam.ioVRefNum   = vRefNum;
+    pb.fileParam.ioDirID     = dirID;
     pb.fileParam.ioFVersNum  = 0;
     pb.fileParam.ioFDirIndex = 0;
-    return PBSetFInfoSync(&pb);
+    return PBHSetFInfoSync(&pb);
 }
 
 Boolean FileIOFileExists(short vRefNum, long dirID, ConstStr255Param name)

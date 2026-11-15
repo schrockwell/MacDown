@@ -70,6 +70,8 @@ resource 'MENU' (130, "Edit") {
         "Select All",                 noIcon, "A",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Duplicate",                  noIcon, "D",    noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
+        "Preferences\0xC9",            noIcon, ",",    noMark, plain;
     }
 };
 
@@ -155,7 +157,7 @@ resource 'WIND' (130, "Shortcuts") {
 resource 'WIND' (131, "Browser") {
     { 40, 20, 250, 200 },     /* 210 tall x 180 wide, top-left of screen */
     zoomDocProc,
-    visible,
+    invisible,                /* shown by BrowserShow after it's positioned */
     goAway,
     0x0,
     "Browser",
@@ -252,6 +254,35 @@ resource 'DITL' (130, "New Folder") {
 
         { 80, 216, 108, 284 },
         UserItem { disabled };
+    }
+};
+
+/* ---- Preferences (Edit > Preferences..., Cmd-,) ----
+
+   A modeless window with a close box -- no OK/Cancel; changes apply
+   (and are saved) as soon as they're made. Driven from the main event
+   loop in src/main.c. */
+
+resource 'DLOG' (133, "Preferences") {
+    { 80, 80, 160, 420 },
+    noGrowDocProc,
+    invisible,
+    goAway,
+    0x0,
+    133,
+    "Preferences",
+    centerMainScreen
+};
+
+resource 'DITL' (133, "Preferences") {
+    {
+        { 14, 14, 32, 326 },
+        CheckBox { enabled,
+            "Reopen documents and Browser at launch" };
+
+        { 36, 32, 72, 326 },
+        StaticText { disabled,
+            "Restores the windows that were open when you last quit." };
     }
 };
 

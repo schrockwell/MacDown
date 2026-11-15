@@ -51,6 +51,10 @@
 #define kEditClear 6
 #define kEditSelAll 7
 #define kEditDuplicate 9
+#define kEditPreferences 11
+
+#define kPrefsDLOG 133
+#define kPrefsRestoreBox 1
 
 #define kFormatBold 1
 #define kFormatItalic 2
@@ -146,6 +150,114 @@ static void Initialize(void)
        Recent and the saved folders are available. */
     PrefsLoad();
     RebuildRecentMenu();
+    {
+        Rect r;
+        if (PrefsGetBrowserBounds(&r))
+            BrowserSetSavedBounds(&r);
+    }
+}
+
+/* Reopen what was open at the last quit, if the user wants that.
+   Anything that can't be found or read is skipped silently. Documents
+   are stored back to front, so opening them in order leaves the old
+   front window in front. */
+static void RestoreSession(void)
+{
+    short i, n;
+
+    if (!PrefsGetRestoreSession())
+        return;
+    if (PrefsGetBrowserOpen())
+        BrowserShow();
+
+    n = PrefsOpenDocCount();
+    for (i = 0; i < n; i++)
+    {
+        short vRef;
+        long dirID;
+        Str255 name;
+        if (PrefsOpenDocGet(i, &vRef, &dirID, name))
+            (void)DocOpenFromDirQuiet(vRef, dirID, name);
+    }
+}
+
+/* ---- Edit > Preferences ----
+
+   A modeless window (close box, no OK/Cancel). Toggling the checkbox
+   takes effect and is written to the prefs file immediately. */
+
+static DialogPtr gPrefsDlg = NULL;
+
+static Boolean PrefsWindowIsFront(void)
+{
+    return gPrefsDlg != NULL && FrontWindow() == (WindowPtr)gPrefsDlg;
+}
+
+static void PrefsWindowClose(void)
+{
+    if (gPrefsDlg == NULL)
+        return;
+    DisposeDialog(gPrefsDlg);
+    gPrefsDlg = NULL;
+}
+
+static void DoPreferences(void)
+{
+    short itype;
+    Handle ihdl;
+    Rect ir;
+
+    if (gPrefsDlg != NULL)
+    {
+        SelectWindow((WindowPtr)gPrefsDlg);
+        return;
+    }
+    gPrefsDlg = GetNewDialog(kPrefsDLOG, NULL, (WindowPtr)-1L);
+    if (gPrefsDlg == NULL)
+        return;
+    GetDialogItem(gPrefsDlg, kPrefsRestoreBox, &itype, &ihdl, &ir);
+    SetControlValue((ControlHandle)ihdl, PrefsGetRestoreSession() ? 1 : 0);
+    ShowWindow((WindowPtr)gPrefsDlg);
+    SelectWindow((WindowPtr)gPrefsDlg);
+}
+
+/* Route events that belong to the Preferences window. Returns true if
+   the event was consumed. Command-keys are left for the menus, and a
+   click on the window while it's in back just brings it forward (via
+   HandleMouse). */
+static Boolean HandlePrefsEvent(EventRecord *ev)
+{
+    DialogPtr hitDlg;
+    short item;
+
+    if (gPrefsDlg == NULL)
+        return false;
+    if ((ev->what == keyDown || ev->what == autoKey) && (ev->modifiers & cmdKey))
+        return false;
+    if (ev->what == mouseDown)
+    {
+        WindowPtr w;
+        if (FindWindow(ev->where, &w) != inContent || w != (WindowPtr)gPrefsDlg
+            || w != FrontWindow())
+            return false;
+    }
+    if (!IsDialogEvent(ev))
+        return false;
+
+    if (DialogSelect(ev, &hitDlg, &item) && hitDlg == gPrefsDlg
+        && item == kPrefsRestoreBox)
+    {
+        short itype;
+        Handle ihdl;
+        Rect ir;
+        ControlHandle box;
+        GetDialogItem(gPrefsDlg, kPrefsRestoreBox, &itype, &ihdl, &ir);
+        box = (ControlHandle)ihdl;
+        SetControlValue(box, 1 - GetControlValue(box));
+        PrefsSetRestoreSession(GetControlValue(box) != 0);
+        PrefsSave();
+    }
+    return true;
 }
 
 /* System 6 launch-with-files: open every dropped file. DocOpen owns
@@ -309,6 +421,9 @@ static void HandleMouse(EventRecord *ev)
             DocClose(doc);
         else if (isBrowser && TrackGoAway(w, ev->where))
             BrowserClose();
+        else if (gPrefsDlg != NULL && w == (WindowPtr)gPrefsDlg
+                 && TrackGoAway(w, ev->where))
+            PrefsWindowClose();
         break;
     case inZoomIn:
     case inZoomOut:
@@ -460,6 +575,12 @@ static void HandleKey(EventRecord *ev)
     if (cmd && (c == '`' || c == '~'))
     {
         DocCycleWindow();
+        return;
+    }
+
+    if (cmd && (c == 'w' || c == 'W') && PrefsWindowIsFront())
+    {
+        PrefsWindowClose();
         return;
     }
 
@@ -1139,7 +1260,7 @@ static void DoFileOpen(void)
 
 static void HandleQuit(void)
 {
-    if (DocCloseAll())
+    if (DocCloseAllForQuit())
         gQuitRequested = true;
 }
 
@@ -1204,6 +1325,11 @@ static void HandleMenu(long mResult)
         break;
 
     case kEditMenuID:
+        if (item == kEditPreferences)
+        {
+            DoPreferences();
+            break;
+        }
         if (SystemEdit(item - 1))
             break;
         if (doc == NULL)
@@ -1354,13 +1480,15 @@ int main(void)
     /* On launch, either Finder dropped docs on us (System 6 path) or
        we got an 'odoc' Apple Event. If neither, spawn an untitled doc
        so the user has something to type into. */
+    RestoreSession();
     OpenFromFinderLaunch();
     if (gDocs == NULL)
         DocNew();
 
     while (!gQuitRequested)
     {
-        if (WaitNextEvent(everyEvent, &event, sleepTicks, NULL))
+        if (WaitNextEvent(everyEvent, &event, sleepTicks, NULL)
+            && !HandlePrefsEvent(&event))
         {
             switch (event.what)
             {
@@ -1432,8 +1560,14 @@ int main(void)
     {
         short vRef;
         long  dirID;
+        Boolean browserVisible;
+        Rect browserBounds;
         if (BrowserLastFolder(&vRef, &dirID))
             PrefsSetBrowserFolder(vRef, dirID);
+        if (BrowserGetWindowState(&browserVisible, &browserBounds))
+            PrefsSetBrowserWindow(browserVisible, &browserBounds);
+        else
+            PrefsSetBrowserWindow(browserVisible, NULL);
     }
     PrefsSave();
 

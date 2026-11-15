@@ -24,47 +24,44 @@ typedef enum {
 /* Maximum bytes we'll edit. TextEdit's structural limit. */
 #define kMdMaxFileBytes 32000L
 
-/* Standard File returns a working-directory ref (wdRefNum) that the
-   File Manager can silently RECYCLE to a different folder once the
-   per-process pool fills up. If we cache that wdRefNum and use it on
-   a later save, we end up writing to whatever folder the slot got
-   reassigned to — clobbering same-named files in unrelated folders.
-   FileIOOwnWD opens a wdRefNum that *we* own (via OpenWD); the
-   system can't recycle it until we CloseWD it. Pass the wdRefNum
-   from any SFReply/AppFile here, get back a stable one to cache. */
-OSErr FileIOOwnWD(short anyWDRefNum, short *outOwnedWD);
+/* Files are addressed by (real volume refNum, directory ID, name) and
+   accessed with the HFS PBH calls; MacDown never opens or closes
+   working directories (see file_io.c for why). */
 
-/* For Apple Events whose direct param is an FSSpec (vRefNum + parID).
-   No wdRefNum involved on the inbound side, but we still want our
-   own slot so it stays put for subsequent saves. */
-OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD);
-
-/* Read-only: convert any wdRefNum (or real vRefNum) into the
-   underlying (vRefNum, dirID) pair without opening a new wd slot. */
+/* Convert a wdRefNum from Standard File / AppFiles / SysEnvirons (or a
+   plain vRefNum) to (volume, dirID). Read-only; call it right away,
+   while the wdRefNum is still valid. */
 OSErr FileIOResolveWD(short anyWDRefNum, short *outVRefNum, long *outDirID);
 
-/* Release an owned wdRefNum. Call from DocClose when hasFile. */
-void  FileIOReleaseWD(short ownedWD);
+/* Open a file's data fork with the given permission (fsRdPerm,
+   fsRdWrPerm, ...). */
+OSErr FileIOOpen(short vRefNum, long dirID, ConstStr255Param name,
+                 SignedByte perm, short *outRefNum);
 
-/* Open a file by HFS coordinates and read its full contents into a
-   freshly-allocated Handle. Contents are normalized to CR line endings
-   in place (the only thing TextEdit understands). Original kind reported
-   via *outLE; fold count via *outFoldCount. Caller DisposHandles. */
-OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
+/* Create an empty file with the given Finder creator/type. */
+OSErr FileIOCreate(short vRefNum, long dirID, ConstStr255Param name,
+                   OSType creator, OSType type);
+
+/* Read a file's full contents into a freshly-allocated Handle.
+   Contents are normalized to CR line endings in place (the only thing
+   TextEdit understands). Original kind reported via *outLE; fold count
+   via *outFoldCount. Returns -1 if the file is too big to edit. Caller
+   DisposeHandles. */
+OSErr FileIOReadDoc(short vRefNum, long dirID, ConstStr255Param name,
                     Handle *outData,
                     LineEndKind *outLE,
                     long *outFoldCount);
 
-/* Save data (CR-terminated) to (vRefNum, name), expanding CR back to
-   `le` on write. Creates the file if it doesn't exist. */
-OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
+/* Save data (CR-terminated), expanding CR back to `le` on write.
+   Overwrites in place; creates the file if it doesn't exist. */
+OSErr FileIOWriteDoc(short vRefNum, long dirID, ConstStr255Param name,
                      const char *data, long len, LineEndKind le);
 
 /* True if a file (not a folder) named `name` exists in (vRefNum, dirID). */
 Boolean FileIOFileExists(short vRefNum, long dirID, ConstStr255Param name);
 
-/* Set Finder type/creator on a freshly-saved file. */
-OSErr FileIOSetTypeAndCreator(short vRefNum, ConstStr255Param name,
+/* Set Finder type/creator on a file. */
+OSErr FileIOSetTypeAndCreator(short vRefNum, long dirID, ConstStr255Param name,
                               OSType type, OSType creator);
 
 #endif

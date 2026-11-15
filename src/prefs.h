@@ -42,6 +42,26 @@ void    PrefsRecentAdd(short vRefNum, long dirID, ConstStr255Param name);
 void    PrefsRecentRemove(short index);
 void    PrefsRecentClear(void);
 
+/* Edit > Preferences: reopen the last session's documents and browser
+   at launch (default on). */
+Boolean PrefsGetRestoreSession(void);
+void    PrefsSetRestoreSession(Boolean on);
+
+/* Documents open at the last quit, in back-to-front window order so
+   reopening them in sequence leaves the old front window in front. */
+#define kPrefsMaxOpenDocs 8
+void    PrefsOpenDocsClear(void);
+void    PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name);
+short   PrefsOpenDocCount(void);
+Boolean PrefsOpenDocGet(short index, short *outVRef, long *outDirID,
+                        StringPtr outName);
+
+/* Browser window: whether it was showing at quit, and its content rect
+   in global coordinates. */
+void    PrefsSetBrowserWindow(Boolean open, const Rect *globalBounds);
+Boolean PrefsGetBrowserOpen(void);
+Boolean PrefsGetBrowserBounds(Rect *outGlobalBounds);
+
 /* True if (vRefNum, dirID) names an existing directory right now. */
 Boolean PrefsFolderExists(short vRefNum, long dirID);
 
