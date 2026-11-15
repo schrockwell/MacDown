@@ -45,8 +45,11 @@ DocState *DocNew(void); /* create + show new empty doc */
 Boolean DocOpen(short anyWDRefNum, ConstStr255Param name);
 Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name);
 /* Session restore: no alerts if the file is missing or unreadable, and
-   Open Recent is left alone. Returns false if nothing was opened. */
-Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name);
+   Open Recent is left alone. The window gets globalBounds (content rect;
+   NULL or empty for the usual cascade) if it's still on screen. Returns
+   false if nothing was opened. */
+Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name,
+                            const Rect *globalBounds);
 Boolean DocSave(DocState *doc);
 Boolean DocSaveAs(DocState *doc);
 Boolean DocPromptSaveIfDirty(DocState *doc); /* true = ok to proceed */

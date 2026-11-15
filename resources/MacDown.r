@@ -264,7 +264,7 @@ resource 'DITL' (130, "New Folder") {
    loop in src/main.c. */
 
 resource 'DLOG' (133, "Preferences") {
-    { 80, 80, 160, 420 },
+    { 80, 80, 126, 320 },
     noGrowDocProc,
     invisible,
     goAway,
@@ -276,13 +276,8 @@ resource 'DLOG' (133, "Preferences") {
 
 resource 'DITL' (133, "Preferences") {
     {
-        { 14, 14, 32, 326 },
-        CheckBox { enabled,
-            "Reopen documents and Browser at launch" };
-
-        { 36, 32, 72, 326 },
-        StaticText { disabled,
-            "Restores the windows that were open when you last quit." };
+        { 14, 14, 32, 226 },
+        CheckBox { enabled, "Reopen windows at launch" };
     }
 };
 

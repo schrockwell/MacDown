@@ -20,7 +20,7 @@
 #endif
 
 #define kPrefsMagic   'MDpf'
-#define kPrefsVersion 2
+#define kPrefsVersion 3
 #define kPrefsType    'pref'
 #define kPrefsCreator 'MDED'
 
@@ -55,10 +55,14 @@ typedef struct {
     Rect         browserBounds;    /* global content rect */
     short        openDocCount;     /* back-to-front window order */
     StoredFile   openDocs[kPrefsMaxOpenDocs];
+    /* ---- version 3 ---- (version 2 files end here) */
+    Rect         openDocBounds[kPrefsMaxOpenDocs];  /* global content rects;
+                                                       empty = not known */
 } PrefsRecord;
 
-/* Bytes a version 1 prefs file holds (a prefix of the v2 layout). */
+/* Bytes older prefs files hold (each a prefix of the current layout). */
 #define kPrefsV1Size offsetof(PrefsRecord, restoreSession)
+#define kPrefsV2Size offsetof(PrefsRecord, openDocBounds)
 
 static PrefsRecord gPrefs;
 
@@ -187,6 +191,9 @@ void PrefsLoad(void)
     {
         if (rec.version == kPrefsVersion && count == sizeof(rec)) {
             gPrefs = rec;
+        } else if (rec.version == 2 && count >= (long)kPrefsV2Size) {
+            BlockMoveData(&rec, &gPrefs, kPrefsV2Size);
+            gPrefs.version = kPrefsVersion;
         } else if (rec.version == 1 && count >= (long)kPrefsV1Size) {
             /* Older file: keep its fields, defaults for the rest. */
             BlockMoveData(&rec, &gPrefs, kPrefsV1Size);
@@ -336,13 +343,18 @@ void PrefsOpenDocsClear(void)
     gPrefs.openDocCount = 0;
 }
 
-void PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name)
+void PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name,
+                      const Rect *globalBounds)
 {
     StoredFile f;
     if (gPrefs.openDocCount >= kPrefsMaxOpenDocs) return;
     if (name[0] == 0 || name[0] > 63) return;
     if (!StoreFolder(vRefNum, dirID, &f.folder)) return;
     PStrCopy(f.name, name);
+    if (globalBounds != NULL)
+        gPrefs.openDocBounds[gPrefs.openDocCount] = *globalBounds;
+    else
+        SetRect(&gPrefs.openDocBounds[gPrefs.openDocCount], 0, 0, 0, 0);
     gPrefs.openDocs[gPrefs.openDocCount++] = f;
 }
 
@@ -352,12 +364,14 @@ short PrefsOpenDocCount(void)
 }
 
 Boolean PrefsOpenDocGet(short index, short *outVRef, long *outDirID,
-                        StringPtr outName)
+                        StringPtr outName, Rect *outGlobalBounds)
 {
     if (index < 0 || index >= gPrefs.openDocCount) return false;
     if (!ResolveFolder(&gPrefs.openDocs[index].folder, outVRef, outDirID))
         return false;
     PStrCopy(outName, gPrefs.openDocs[index].name);
+    if (outGlobalBounds != NULL)
+        *outGlobalBounds = gPrefs.openDocBounds[index];
     return true;
 }
 

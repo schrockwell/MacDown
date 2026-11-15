@@ -16,9 +16,12 @@
 #include "document.h"
 #include "pstr.h"
 #include "prefs.h"
+#include "winbounds.h"
 #include "toolbar_icons.h"
 
 #define kBrowserWindowID  131
+#define kBrowserMinW      140   /* grow limits (main.c inGrow) */
+#define kBrowserMinH      160
 #define kRowHeight        14    /* Geneva 9pt line height + 2px padding so
                                    rows don't share an edge pixel with the
                                    row above (which the next row's white
@@ -166,8 +169,6 @@ static Rect    BrowserListRect(void);
 static short   BrowserRowsVisible(void);
 static void    BrowserAdjustScrollBar(void);
 static pascal void BrowserScrollAction(ControlHandle ctl, short part);
-static Boolean WindowGlobalBounds(WindowPtr w, Rect *out);
-static Boolean BoundsAreUsable(const Rect *r);
 
 /* ---- helpers ---- */
 
@@ -890,11 +891,9 @@ void BrowserShow(void)
            this doesn't flash at the default spot first). Skipped if the
            saved frame's title bar wouldn't be reachable on the current
            screens, e.g. after switching to a smaller monitor. */
-        if (gHaveSavedBounds && BoundsAreUsable(&gSavedBounds)) {
-            MoveWindow(gWindow, gSavedBounds.left, gSavedBounds.top, false);
-            SizeWindow(gWindow, gSavedBounds.right - gSavedBounds.left,
-                       gSavedBounds.bottom - gSavedBounds.top, false);
-        }
+        if (gHaveSavedBounds
+            && WindowBoundsUsable(&gSavedBounds, kBrowserMinW, kBrowserMinH))
+            WindowApplyBounds(gWindow, &gSavedBounds);
 
         /* Top-strip button rects. Custom drawn (not Control Manager)
            so we can set Geneva 9 and have them repaint via our own
@@ -1130,41 +1129,6 @@ void BrowserIdle(void)
        starts at top (BrowserLoadCurrent zeroes gTopIdx). */
     BrowserLoadCurrent();
     BrowserDrawList();
-}
-
-/* Content rect of `w` in global coordinates. */
-static Boolean WindowGlobalBounds(WindowPtr w, Rect *out)
-{
-    GrafPtr saved;
-    Point tl;
-    if (w == NULL) return false;
-    GetPort(&saved);
-    SetPort(w);
-    tl.h = w->portRect.left;
-    tl.v = w->portRect.top;
-    LocalToGlobal(&tl);
-    SetPort(saved);
-    out->left   = tl.h;
-    out->top    = tl.v;
-    out->right  = tl.h + (w->portRect.right - w->portRect.left);
-    out->bottom = tl.v + (w->portRect.bottom - w->portRect.top);
-    return true;
-}
-
-/* A saved frame is usable if it's at least the minimum browser size and
-   a decent chunk of its title bar lands on some screen below the menu
-   bar, so the user can always drag it. */
-static Boolean BoundsAreUsable(const Rect *r)
-{
-    Rect titleBar, desk, hit;
-    RgnHandle gray = LMGetGrayRgn();
-    if (r->right - r->left < 140 || r->bottom - r->top < 160) return false;
-    if (gray == NULL) return false;
-    desk = (**gray).rgnBBox;
-    SetRect(&titleBar, r->left + 8, r->top - 16, r->right - 8, r->top - 2);
-    if (!SectRect(&titleBar, &desk, &hit)) return false;
-    if (hit.right - hit.left < 32) return false;
-    return RectInRgn(&titleBar, gray);
 }
 
 void BrowserSetSavedBounds(const Rect *globalBounds)

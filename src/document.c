@@ -19,6 +19,7 @@
 #include "pstr.h"
 #include "file_io.h"
 #include "prefs.h"
+#include "winbounds.h"
 
 #define kWindowID 128
 #define kSaveChangesALRT 129
@@ -31,6 +32,14 @@
 #define kErrTooManyDocs 6
 
 #define kMaxOpenDocs 8
+/* Smallest document window (matches the grow limits in main.c). */
+#define kDocMinW 200
+#define kDocMinH 100
+
+/* Session restore: the frame the next DocNew window should get instead
+   of the next cascade position. */
+static Rect    gNextBounds;
+static Boolean gHaveNextBounds = false;
 
 #define kUndoMenuID 130
 #define kUndoMenuItem 1
@@ -358,6 +367,10 @@ DocState *DocNew(void)
             return NULL;
         }
         MoveWindow(w, posH, posV, false);
+        if (gHaveNextBounds
+            && WindowBoundsUsable(&gNextBounds, kDocMinW, kDocMinH))
+            WindowApplyBounds(w, &gNextBounds);
+        gHaveNextBounds = false;
     }
 
     SetPort(w);
@@ -473,6 +486,7 @@ Boolean DocCloseAllForQuit(void)
     short vRefs[kPrefsMaxOpenDocs];
     long  dirIDs[kPrefsMaxOpenDocs];
     Str63 names[kPrefsMaxOpenDocs];
+    Rect  bounds[kPrefsMaxOpenDocs];
     short n = 0;
     short i;
     DocState *doc;
@@ -489,6 +503,8 @@ Boolean DocCloseAllForQuit(void)
             vRefs[n]  = doc->vRefNum;
             dirIDs[n] = doc->dirID;
             PStrCopy(names[n], doc->fileName);
+            if (!WindowGlobalBounds(doc->window, &bounds[n]))
+                SetRect(&bounds[n], 0, 0, 0, 0);
             n++;
         }
         DocDispose(doc);
@@ -497,7 +513,7 @@ Boolean DocCloseAllForQuit(void)
     /* Stored back to front: reopening in order restores the stacking. */
     PrefsOpenDocsClear();
     for (i = n - 1; i >= 0; i--)
-        PrefsOpenDocsAdd(vRefs[i], dirIDs[i], names[i]);
+        PrefsOpenDocsAdd(vRefs[i], dirIDs[i], names[i], &bounds[i]);
     return true;
 }
 
@@ -518,7 +534,7 @@ Boolean DocCloseAll(void)
 void DocUpdateTitle(DocState *doc)
 {
     Str255 title;
-    short i;
+    short i, n;
     const unsigned char *src;
     const unsigned char *fallback = (const unsigned char *)"\puntitled";
 
@@ -530,7 +546,12 @@ void DocUpdateTitle(DocState *doc)
         title[++title[0]] = 0xA5;
         title[++title[0]] = ' ';
     }
-    for (i = 1; i <= src[0]; i++)
+    n = src[0];
+    /* "notes.md" shows as "notes". */
+    if (doc->hasFile && n > 3 && src[n - 2] == '.'
+        && (src[n - 1] | 0x20) == 'm' && (src[n] | 0x20) == 'd')
+        n -= 3;
+    for (i = 1; i <= n; i++)
         title[++title[0]] = src[i];
 
     SetWTitle(doc->window, title);
@@ -775,11 +796,19 @@ Boolean DocOpenFromDir(short vRefNum, long dirID, ConstStr255Param name)
     return OpenFromDir(vRefNum, dirID, name, false);
 }
 
-Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name)
+Boolean DocOpenFromDirQuiet(short vRefNum, long dirID, ConstStr255Param name,
+                            const Rect *globalBounds)
 {
+    Boolean ok;
     if (!FileIOFileExists(vRefNum, dirID, name))
         return false;
-    return OpenFromDir(vRefNum, dirID, name, true);
+    if (globalBounds != NULL && !EmptyRect(globalBounds)) {
+        gNextBounds = *globalBounds;
+        gHaveNextBounds = true;
+    }
+    ok = OpenFromDir(vRefNum, dirID, name, true);
+    gHaveNextBounds = false;   /* unused if it reused a window or failed */
+    return ok;
 }
 
 Boolean DocSave(DocState *doc)

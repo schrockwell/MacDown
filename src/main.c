@@ -176,8 +176,9 @@ static void RestoreSession(void)
         short vRef;
         long dirID;
         Str255 name;
-        if (PrefsOpenDocGet(i, &vRef, &dirID, name))
-            (void)DocOpenFromDirQuiet(vRef, dirID, name);
+        Rect bounds;
+        if (PrefsOpenDocGet(i, &vRef, &dirID, name, &bounds))
+            (void)DocOpenFromDirQuiet(vRef, dirID, name, &bounds);
     }
 }
 

@@ -48,13 +48,16 @@ Boolean PrefsGetRestoreSession(void);
 void    PrefsSetRestoreSession(Boolean on);
 
 /* Documents open at the last quit, in back-to-front window order so
-   reopening them in sequence leaves the old front window in front. */
+   reopening them in sequence leaves the old front window in front,
+   each with its window's global content rect (empty if not known;
+   globalBounds may be NULL). */
 #define kPrefsMaxOpenDocs 8
 void    PrefsOpenDocsClear(void);
-void    PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name);
+void    PrefsOpenDocsAdd(short vRefNum, long dirID, ConstStr255Param name,
+                         const Rect *globalBounds);
 short   PrefsOpenDocCount(void);
 Boolean PrefsOpenDocGet(short index, short *outVRef, long *outDirID,
-                        StringPtr outName);
+                        StringPtr outName, Rect *outGlobalBounds);
 
 /* Browser window: whether it was showing at quit, and its content rect
    in global coordinates. */
