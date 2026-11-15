@@ -9,6 +9,11 @@ project(MacDown C)
 #   - MACDOWN_VERSION_STR compile-time #define — used by main.c
 # Bump the VERSION file and rebuild; everything else follows.
 file(READ "${CMAKE_SOURCE_DIR}/VERSION" _MACDOWN_VERSION_RAW)
+# Re-run configure whenever VERSION changes. Without this, the value is
+# only read on the first configure and a bumped VERSION never reaches
+# the About box or the 'vers' resource of an existing build/.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/VERSION")
 string(STRIP "${_MACDOWN_VERSION_RAW}" MACDOWN_VERSION)
 if(NOT MACDOWN_VERSION MATCHES "^([0-9])\\.([0-9])\\.([0-9])")
     message(FATAL_ERROR
@@ -60,6 +65,15 @@ add_application(MacDown
     CREATOR MDED
 )
 add_dependencies(MacDown toolbar_icons)
+
+# Retro68 compiles each .r with a custom command that depends only on
+# that .r file, not on what it #includes. MacDown.r includes the
+# generated version.r, so without this a VERSION bump left the old
+# 'vers' and owner resources in MacDown.r.rsrc.bin.
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/MacDown.r.rsrc.bin
+    DEPENDS ${CMAKE_BINARY_DIR}/version.r
+    APPEND)
 
 # Retro68's add_application macro hardcodes the .APPL extension on the
 # data-fork output. Mac apps don't have extensions, so rename it to
