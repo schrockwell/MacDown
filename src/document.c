@@ -226,6 +226,7 @@ static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
 
 /* Cached uniform line height (definition lives further down). */
 static short LineHeight(TEHandle te);
+static short LineIndexForOffset(DocState *doc, short offset);
 
 /* ---- Active-doc tracking via scroll-action UPP context ----
 
@@ -809,10 +810,50 @@ void DocResize(DocState *doc)
     MoveControl(doc->vScroll, w->portRect.right - kMdScrollWidth, -1);
     SizeControl(doc->vScroll, kMdScrollWidth + 1, w->portRect.bottom - 14);
 
-    ComputeTERects(w, &destR, &viewR);
-    (**doc->te).destRect = destR;
-    (**doc->te).viewRect = viewR;
-    TECalText(doc->te);
+    /* Remember the first character of the top visible line (plus any
+       sub-line pixel offset) so the reflow doesn't jump back to the top
+       of the document. Line breaks move when the width changes, so
+       anchor on a character offset, not a line number or pixel value. */
+    {
+        TEHandle te = doc->te;
+        short lh = LineHeight(te);
+        short nLines = (**te).nLines;
+        long scrolled = (long)(**te).viewRect.top - (long)(**te).destRect.top;
+        long remainder = 0;
+        short topOffset = 0;
+        short viewH;
+        long newScroll, maxScroll;
+
+        if (lh > 0 && scrolled > 0 && nLines > 0)
+        {
+            long topLine = scrolled / lh;
+            if (topLine > nLines - 1)
+                topLine = nLines - 1;
+            remainder = scrolled - topLine * lh;
+            topOffset = (**te).lineStarts[topLine];
+        }
+
+        ComputeTERects(w, &destR, &viewR);
+        (**te).destRect = destR;
+        (**te).viewRect = viewR;
+        TECalText(te);
+
+        newScroll = 0;
+        if (topOffset > 0 || remainder > 0)
+        {
+            newScroll = (long)LineIndexForOffset(doc, topOffset) * lh + remainder;
+            viewH = viewR.bottom - viewR.top;
+            maxScroll = (long)(**te).nLines * lh - viewH;
+            if (newScroll > maxScroll)
+                newScroll = maxScroll;
+            if (newScroll < 0)
+                newScroll = 0;
+            if (newScroll > 32767L)
+                newScroll = 32767L;
+        }
+        (**te).destRect.top    = destR.top - (short)newScroll;
+        (**te).destRect.bottom = destR.bottom - (short)newScroll;
+    }
     DocAdjustScrollbar(doc);
     InvalRect(&w->portRect);
 
