@@ -101,6 +101,11 @@ Startup Items (`install`) and just `wait` + `shot`. No input is needed.
   Click a MacDown window to bring it back.
 - **`pkill -f` matches two processes**: the background shell wrapper and the
   emulator. `$E stop` targets the emulator binary only.
+- **The user may have their own Basilisk II open** (e.g. with
+  `deps/basiliskii/prefs`). The script only ever touches the instance
+  booted with `$EMU_DIR/prefs`: `stop`, `shot`, focus and input all go
+  by that process's pid, so it's safe to run alongside theirs. Never kill
+  an emulator you didn't boot.
 - **`hls` exits 0 even for paths that don't exist.** Check listings, not
   exit codes.
 - **`sips` silently ignores `--cropOffset`** on these captures; the script

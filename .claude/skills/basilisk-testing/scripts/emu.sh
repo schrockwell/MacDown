@@ -25,8 +25,15 @@ hfs() {   # run an hfsutils command (toolchain copy first, then PATH)
     if [ -x "$HFS_BIN/$t" ]; then "$HFS_BIN/$t" "$@"; else "$t" "$@"; fi
 }
 
-emu_pid() {   # the emulator itself -- NOT the shell that launched it
-    pgrep -f "^$BASILISK_BIN" | head -1 || true
+emu_pid() {   # OUR emulator (booted with $PREFS) -- not the shell that
+              # launched it, and not some other Basilisk II the user has open
+    pgrep -f "^$BASILISK_BIN --config $PREFS\$" | head -1 || true
+}
+
+need_pid() {
+    local p; p=$(emu_pid)
+    [ -n "$p" ] || die "our emulator isn't running ('$0 boot' first)"
+    echo "$p"
 }
 
 need_stopped() {
@@ -55,32 +62,35 @@ system_folder() {   # root folder holding both "System" and "Startup Items"
 }
 
 window_origin() {   # prints "OX OY": screen point of emulated (0,0)
-    local pos
-    pos=$(osascript -e 'tell application "System Events" to tell process "BasiliskII" to get position of window 1' 2>/dev/null) \
+    local pos pid; pid=$(need_pid)
+    pos=$(osascript -e "tell application \"System Events\" to tell (first process whose unix id is $pid) to get position of window 1" 2>/dev/null) \
         || die "no Basilisk II window (is it booted?)"
     local x=${pos%%,*} y=${pos##*, }
     echo "$x $((y + TITLE_H))"
 }
 
 window_id() {
+    local pid; pid=$(need_pid)
     osascript -l JavaScript -e '
+      var pid = '"$pid"';
       ObjC.import("CoreGraphics");
       var l = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
       var r = "";
       for (var i = 0; i < l.count; i++) {
         var w = l.objectAtIndex(i);
-        var n = ObjC.unwrap(w.objectForKey("kCGWindowOwnerName")) || "";
-        if (n === "BasiliskII") { r = ObjC.unwrap(w.objectForKey("kCGWindowNumber")); break; }
+        var p = ObjC.unwrap(w.objectForKey("kCGWindowOwnerPID"));
+        var layer = ObjC.unwrap(w.objectForKey("kCGWindowLayer"));
+        if (p === pid && layer === 0) { r = ObjC.unwrap(w.objectForKey("kCGWindowNumber")); break; }
       }
       r'
 }
 
-focus() {   # never send keys/clicks unless Basilisk is frontmost
-    osascript -e 'tell application "System Events" to set frontmost of process "BasiliskII" to true' >/dev/null 2>&1 || true
+focus() {   # never send keys/clicks unless OUR emulator is frontmost
+    local pid front; pid=$(need_pid)
+    osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" >/dev/null 2>&1 || true
     sleep 0.4
-    local front
-    front=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true')
-    [ "$front" = "BasiliskII" ] || die "focus failed: frontmost app is '$front' (did someone click another window?)"
+    front=$(osascript -e 'tell application "System Events" to get unix id of first process whose frontmost is true')
+    [ "$front" = "$pid" ] || die "focus failed: frontmost process is $front, not our emulator ($pid) (did someone click another window?)"
 }
 
 pt() {   # emulated (x,y) -> "sx,sy" screen point
@@ -150,7 +160,7 @@ EOF
 
   wait)     # wait [settle-seconds]   block until the window exists, then settle
     for _ in $(seq 1 60); do
-        osascript -e 'tell application "System Events" to tell process "BasiliskII" to get position of window 1' >/dev/null 2>&1 && break
+        [ -n "$(emu_pid)" ] && window_origin >/dev/null 2>&1 && break
         sleep 1
     done
     sleep "${1:-20}"; echo "ready" ;;
