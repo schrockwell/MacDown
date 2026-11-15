@@ -135,18 +135,106 @@ static void Initialize(void)
 }
 
 /* System 6 launch-with-files: open every dropped file. DocOpen owns
-   the wdRefNum internally so it can't be recycled later. */
+   the wdRefNum internally so it can't be recycled later.
+
+   We walk the Finder's AppParmHandle ourselves instead of calling the
+   Multiversal CountAppFiles/GetAppFiles glue, which has two bugs:
+   CountAppFiles returns WITHOUT writing *count when the handle is
+   empty or NULL (normal for an Apple-Event-aware app under System 7,
+   which gets 'odoc' instead), leaving the loop bound as stack garbage
+   so we'd "open" hundreds of junk files at launch; and GetAppFiles
+   never advances past the first entry, so asking for file #2 hangs
+   forever. Layout: short message, short count, then per file
+   { short vRefNum; OSType fType; short versNum; Str fName } padded to
+   an even length. */
 static void OpenFromFinderLaunch(void)
 {
-    short msg, count, i;
-    AppFile af;
-    CountAppFiles(&msg, &count);
-    for (i = 1; i <= count; i++)
+    Handle h = LMGetAppParmHandle();
+    long size;
+    long off;
+    short count, i;
+
+    if (h == NULL || *h == NULL)
+        return;
+    size = GetHandleSize(h);
+    if (size < 4)
+        return;
+
+    count = ((short *)*h)[1];
+    off = 4;
+    for (i = 0; i < count; i++)
     {
-        GetAppFiles(i, &af);
-        DocOpen(af.vRefNum, af.fName);
-        ClrAppFiles(i);
+        short vRefNum;
+        Str63 name;
+        unsigned char nameLen;
+        long entryLen;
+
+        if (off + 9 > size)
+            break;
+        nameLen = (unsigned char)(*h)[off + 8];
+        entryLen = (9L + nameLen + 1L) & ~1L;
+        if (off + 9 + nameLen > size)
+            break;
+
+        /* Copy out before DocOpen can allocate and move memory. */
+        vRefNum = *(short *)(*h + off);
+        if (nameLen > 63)
+            nameLen = 63;
+        name[0] = nameLen;
+        BlockMoveData(*h + off + 9, name + 1, nameLen);
+        off += entryLen;
+
+        DocOpen(vRefNum, name);
     }
+}
+
+/* ---- Clipboard ----
+
+   TECut/TECopy/TEPaste only talk to TextEdit's private scrap. Nothing
+   moved text between it and the desk scrap (and the toolbox's
+   TEFromScrap/TEToScrap glue isn't implemented in Multiversal), so
+   pasting text copied in another app or a desk accessory pasted
+   whatever MacDown itself had copied last instead. Publish after every
+   cut/copy, and pull the desk scrap in before a paste whenever its
+   scrapCount says someone else has changed it. */
+
+static short   sScrapCount  = 0;
+static Boolean sScrapSynced = false;
+
+static void PublishTEScrap(void)
+{
+    Handle teScrap = LMGetTEScrpHandle();
+    long len = LMGetTEScrpLength();
+
+    ZeroScrap();
+    if (teScrap != NULL && len > 0)
+    {
+        HLock(teScrap);
+        (void)PutScrap(len, 'TEXT', *teScrap);
+        HUnlock(teScrap);
+    }
+    sScrapCount = InfoScrap()->scrapCount;
+    sScrapSynced = true;
+}
+
+static void SyncTEScrapFromDesk(void)
+{
+    Handle teScrap = LMGetTEScrpHandle();
+    long off = 0;
+    long len;
+    short count = InfoScrap()->scrapCount;
+
+    if (sScrapSynced && count == sScrapCount)
+        return;
+    sScrapCount = count;
+    sScrapSynced = true;
+    if (teScrap == NULL)
+        return;
+
+    len = GetScrap(teScrap, 'TEXT', &off);
+    if (len < 0 || len > kMdMaxFileBytes)
+        len = 0; /* no text on the clipboard (e.g. a picture) */
+    LMSetTEScrpLength((short)len);
 }
 
 /* ---- Mouse ---- */
@@ -551,6 +639,16 @@ static void HandleKey(EventRecord *ev)
                 return;
             }
         }
+    }
+
+    /* TextEdit's record falls apart past 32K. Anything other than a
+       delete that wouldn't shrink the text gets refused at the limit. */
+    if (c != 0x08 && c != 0x7F &&
+        (**doc->te).selStart == (**doc->te).selEnd &&
+        (**doc->te).teLength >= kMdMaxFileBytes)
+    {
+        SysBeep(1);
+        return;
     }
 
     if (c == '\r')
@@ -1083,16 +1181,28 @@ static void HandleMenu(long mResult)
         case kEditCut:
             DocBeforeAction(doc);
             TECut(doc->te);
+            PublishTEScrap();
             DocMarkDirty(doc);
             DocMarkLineDirty(doc, (**doc->te).selStart);
             break;
         case kEditCopy:
             TECopy(doc->te);
+            PublishTEScrap();
             break;
         case kEditPaste:
         {
             short pasteStart = (**doc->te).selStart;
             short pasteEnd;
+            SyncTEScrapFromDesk();
+            /* TextEdit tops out at 32K; refuse a paste that would
+               overflow it rather than corrupting the record. */
+            if ((long)(**doc->te).teLength
+                    - ((**doc->te).selEnd - (**doc->te).selStart)
+                    + (long)LMGetTEScrpLength() > kMdMaxFileBytes)
+            {
+                SysBeep(1);
+                break;
+            }
             DocBeforeAction(doc);
             TEPaste(doc->te);
             pasteEnd = (**doc->te).selStart;

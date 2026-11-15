@@ -535,8 +535,14 @@ static Boolean BrowserPromptFolderName(StringPtr outName)
         }
     }
 
-    DisposeRoutineDescriptor((UniversalProcPtr)filter);
-    DisposeRoutineDescriptor((UniversalProcPtr)outlineUPP);
+    /* Must use the typed Dispose*UPP macros: they're no-ops on 68k,
+       where New*UPP returns the bare proc pointer. A direct
+       DisposeRoutineDescriptor call is the _MixedModeDispatch trap,
+       which doesn't exist on 68k System 6/7 (unimplemented-trap
+       crash) and on a PowerPC would try to free our code as if it
+       were a routine descriptor. */
+    DisposeModalFilterUPP(filter);
+    DisposeUserItemUPP(outlineUPP);
     DisposeDialog(dlg);
     return (hit == 1 && outName[0] > 0);
 }

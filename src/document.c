@@ -924,7 +924,7 @@ void DocClick(DocState *doc, EventRecord *ev)
 
 void DocAdjustScrollbar(DocState *doc)
 {
-    short nLines, totalH, viewH, max, curVal;
+    short nLines, viewH, max, curVal;
 
     if (!doc->te || !doc->vScroll)
         return;
@@ -934,12 +934,20 @@ void DocAdjustScrollbar(DocState *doc)
        is size 12 (see MdRestyleLine), line height is uniform and total
        height is just nLines * lineHeight -- O(1). */
     nLines = (**doc->te).nLines;
-    totalH = (short)((long)nLines * LineHeight(doc->te));
     viewH = (**doc->te).viewRect.bottom - (**doc->te).viewRect.top;
-
-    max = totalH - viewH;
-    if (max < 0)
-        max = 0;
+    {
+        /* Do the math in long: a few thousand short lines overflow a
+           short, which wrapped negative and pinned the scrollbar at 0
+           (unscrollable) on long documents. Control values are shorts,
+           so clamp. */
+        long total = (long)nLines * (long)LineHeight(doc->te);
+        long lmax = total - (long)viewH;
+        if (lmax < 0)
+            lmax = 0;
+        if (lmax > 32767L)
+            lmax = 32767L;
+        max = (short)lmax;
+    }
     SetControlMaximum(doc->vScroll, max);
 
     curVal = (**doc->te).viewRect.top - (**doc->te).destRect.top;

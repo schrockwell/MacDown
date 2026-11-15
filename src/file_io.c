@@ -111,17 +111,32 @@ static long FoldAndNormalize(char *buf, long len, LineEndKind le,
    system won't recycle it until we PBCloseWDSync. From that point on
    every file op uses the classic System-1-era (vRefNum, name) calls
    that work universally on System 6 / Mini vMac and don't have the
-   reliability problems of the H- or PBH-prefixed variants. */
+   reliability problems of the H- or PBH-prefixed variants.
+
+   Every call gets a DIFFERENT ioWDProcID. PBOpenWD doesn't create a
+   new working directory when one already exists for the same
+   (volume, dirID, procID) -- it hands back the existing wdRefNum, and
+   there's no reference count. With a fixed procID, two documents in
+   the same folder (or a document and the browser) shared one
+   wdRefNum, and the first owner to PBCloseWD it pulled the folder out
+   from under the others. Their next Save then failed (or, once the
+   slot was reused, wrote into some other folder). A unique procID per
+   owner guarantees each owner has its own slot to close. */
+
+static unsigned short sNextWDTag = 0;
 
 OSErr FileIOOwnWDFromDir(short vRefNum, long dirID, short *outOwnedWD)
 {
     WDPBRec pb;
     OSErr err;
+    ZeroStruct(pb);
     pb.ioCompletion = NULL;
     pb.ioNamePtr    = NULL;
     pb.ioVRefNum    = vRefNum;
     pb.ioWDDirID    = dirID;
-    pb.ioWDProcID   = 'MDED';
+    /* 'MD' in the high word keeps our slots recognizable; the low word
+       makes each one unique for the session. */
+    pb.ioWDProcID   = (0x4D44L << 16) | (long)(++sNextWDTag); /* 'MD' */
     err = PBOpenWDSync(&pb);
     if (err != noErr) return err;
     if (outOwnedWD) *outOwnedWD = pb.ioVRefNum;
@@ -165,6 +180,33 @@ void FileIOReleaseWD(short ownedWD)
 }
 
 /* ---- File ops ---- Plain non-H calls; the vRefNum is an owned wdRefNum. */
+
+/* Open the data fork with explicit read/write permission. The FSOpen
+   glue asks for fsCurPerm, which quietly hands back a read-only path
+   for a locked file; we'd rather fail at open time with a clear error.
+   The param block is zeroed for the same glue-hygiene reasons as
+   FileIOSetTypeAndCreator below. */
+static OSErr OpenForWrite(short vRefNum, ConstStr255Param name, short *outRefNum)
+{
+    ParamBlockRec pb;
+    OSErr err;
+
+    ZeroStruct(pb);
+    pb.ioParam.ioNamePtr  = (StringPtr)name;
+    pb.ioParam.ioVRefNum  = vRefNum;
+    pb.ioParam.ioPermssn  = fsRdWrPerm;
+    err = PBOpenDFSync(&pb);
+    if (err == paramErr) {
+        /* OpenDF isn't implemented before System 7. */
+        ZeroStruct(pb);
+        pb.ioParam.ioNamePtr  = (StringPtr)name;
+        pb.ioParam.ioVRefNum  = vRefNum;
+        pb.ioParam.ioPermssn  = fsRdWrPerm;
+        err = PBOpenSync(&pb);
+    }
+    *outRefNum = (err == noErr) ? pb.ioParam.ioRefNum : 0;
+    return err;
+}
 
 OSErr FileIOReadDoc(short vRefNum, ConstStr255Param name,
                     Handle *outData,
@@ -252,21 +294,40 @@ OSErr FileIOWriteDoc(short vRefNum, ConstStr255Param name,
         }
     }
 
-    (void) FSDelete(name, vRefNum);  /* fnfErr is fine, ignore all errors */
+    /* Overwrite the existing file in place rather than delete + create.
+       Delete-first destroyed the user's only copy whenever the
+       subsequent Create/Open/Write failed (disk full, locked disk),
+       and it threw away the file's Finder info, creation date and
+       resource fork on every save. Only create when it's missing. */
+    err = OpenForWrite(vRefNum, name, &refNum);
+    if (err == fnfErr) {
+        err = Create(name, vRefNum, 'MDED', 'TEXT');
+        if (err == noErr)
+            err = OpenForWrite(vRefNum, name, &refNum);
+    }
+    if (err != noErr) {
+        refNum = 0;
+        goto done;
+    }
 
-    err = Create(name, vRefNum, 'MDED', 'TEXT');
+    /* Size the file first. Growing allocates the space up front, so a
+       full disk fails here with the original contents still intact. */
+    err = SetEOF(refNum, outLen);
     if (err != noErr) goto done;
 
-    err = FSOpen(name, vRefNum, &refNum);
+    err = SetFPos(refNum, fsFromStart, 0);
     if (err != noErr) goto done;
 
     writeLen = outLen;
     err = FSWrite(refNum, &writeLen, out);
+    if (err == noErr && writeLen != outLen) err = ioErr;
 
 done:
     if (refNum != 0) {
         closeErr = FSClose(refNum);
         if (err == noErr) err = closeErr;
+        /* Push the catalog + data to disk now; floppies get ejected. */
+        (void) FlushVol(NULL, vRefNum);
     }
 
     HUnlock(outH);

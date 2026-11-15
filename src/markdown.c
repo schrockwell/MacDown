@@ -44,7 +44,7 @@ MdLineKind MdClassifyLine(const char *line, short len)
         line[i + 1] == ' ')
     {
         /* Check for task-list extension: "- [ ]" or "- [x]" */
-        if (i + 5 < len &&
+        if (i + 4 < len &&
             line[i + 2] == '[' && line[i + 4] == ']' &&
             (i + 5 == len || line[i + 5] == ' '))
         {
