@@ -72,6 +72,10 @@
 #define kFormatItalic 2
 #define kFormatCode 3
 #define kFormatInsertLink 5
+/* Items 7-9: the front document's line endings, in LineEndKind order
+   (kLE_CR, kLE_LF, kLE_CRLF). */
+#define kFormatLEFirst 7
+#define kFormatLELast  9
 
 #define kLineH1 1
 #define kLineH2 2
@@ -1549,7 +1553,22 @@ static void HandleQuit(void)
 
 static void AdjustMenus(void)
 {
+    MenuHandle fmt = GetMenuHandle(kFormatMenuID);
+    DocState *doc = DocActive();
+    short i;
+
     SyncFileMenuEnables();
+
+    /* Check the front document's line endings; nothing to check (or
+       change) when the front window isn't a document. */
+    for (i = kFormatLEFirst; i <= kFormatLELast; i++)
+    {
+        CheckItem(fmt, i, doc != NULL && doc->leKind == i - kFormatLEFirst);
+        if (doc != NULL)
+            EnableItem(fmt, i);
+        else
+            DisableItem(fmt, i);
+    }
 }
 
 static void HandleMenu(long mResult)
@@ -1688,6 +1707,10 @@ static void HandleMenu(long mResult)
             break;
         case kFormatInsertLink:
             DoInsertLink(doc);
+            break;
+        default:
+            if (item >= kFormatLEFirst && item <= kFormatLELast)
+                DocSetLineEnding(doc, (LineEndKind)(item - kFormatLEFirst));
             break;
         }
         break;

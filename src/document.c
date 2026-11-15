@@ -931,8 +931,6 @@ Boolean DocSaveAs(DocState *doc)
     }
 
     PStrCopy(doc->fileName, reply.fName);
-    if (!doc->hasFile)
-        doc->leKind = PrefsGetNewLineEnding();   /* may have changed since New */
     doc->hasFile = true;
 
     if (!DocSave(doc))
@@ -1078,6 +1076,15 @@ static void RestyleDocument(DocState *doc, short oldLineH)
     EraseRect(&doc->window->portRect);
     InvalRect(&doc->window->portRect);
     SetPort(savedPort);
+}
+
+void DocSetLineEnding(DocState *doc, LineEndKind le)
+{
+    if (doc == NULL || doc->leKind == le)
+        return;
+    DocBeforeAction(doc);   /* the undo snapshot records leKind too */
+    doc->leKind = le;
+    DocMarkDirty(doc);
 }
 
 void DocSetTextStyle(short fontNum, short size)

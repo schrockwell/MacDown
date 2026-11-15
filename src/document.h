@@ -60,6 +60,10 @@ Boolean DocCloseAll(void);                   /* prompt-and-close every doc; fals
    were open (window order) in prefs for session restore. */
 Boolean DocCloseAllForQuit(void);
 
+/* Format > Mac/Unix/Windows: the line endings this document is saved
+   with. Marks it dirty; undoable. */
+void DocSetLineEnding(DocState *doc, LineEndKind le);
+
 /* Edit > Preferences changed: restyle every open document in a new
    font/size, keeping each window's place in its text. */
 void DocSetTextStyle(short fontNum, short size);

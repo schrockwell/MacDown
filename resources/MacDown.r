@@ -84,6 +84,11 @@ resource 'MENU' (131, "Format") {
         "Code",                       noIcon, noKey,  noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
         "Link",                       noIcon, "K",    noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
+        /* Line endings for this file; checked by AdjustMenus. */
+        "Mac (CR)",                   noIcon, noKey,  noMark, plain;
+        "Unix (LF)",                  noIcon, noKey,  noMark, plain;
+        "Windows (CR+LF)",            noIcon, noKey,  noMark, plain;
     }
 };
 
