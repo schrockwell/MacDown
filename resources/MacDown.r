@@ -264,7 +264,7 @@ resource 'DITL' (130, "New Folder") {
    loop in src/main.c. */
 
 resource 'DLOG' (133, "Preferences") {
-    { 80, 80, 126, 320 },
+    { 80, 66, 208, 444 },
     noGrowDocProc,
     invisible,
     goAway,
@@ -276,8 +276,28 @@ resource 'DLOG' (133, "Preferences") {
 
 resource 'DITL' (133, "Preferences") {
     {
-        { 14, 14, 32, 226 },
+        /* 1 */ { 12, 14, 30, 364 },
         CheckBox { enabled, "Reopen windows at launch" };
+
+        /* 2, 3, 4: font and size pop-ups (user items, see main.c) */
+        { 42, 14, 58, 140 },
+        StaticText { disabled, "Font:" };
+        { 40, 144, 60, 308 },
+        UserItem { enabled };
+        { 40, 314, 60, 364 },
+        UserItem { enabled };
+
+        /* 5, 6: line endings for new files */
+        { 70, 14, 86, 140 },
+        StaticText { disabled, "New files use:" };
+        { 68, 144, 88, 364 },
+        UserItem { enabled };
+
+        /* 7, 8: Markdown styling limit */
+        { 98, 14, 114, 140 },
+        StaticText { disabled, "Style Markdown:" };
+        { 96, 144, 116, 364 },
+        UserItem { enabled };
     }
 };
 

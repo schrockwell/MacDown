@@ -20,6 +20,7 @@
 #include "markdown.h"
 #include "apple_events.h"
 #include "prefs.h"
+#include "pstr.h"
 
 #define kMenuBarID 128
 #define kAppleMenuID 128
@@ -54,7 +55,18 @@
 #define kEditPreferences 11
 
 #define kPrefsDLOG 133
+/* DITL 133 items. The pop-ups are user items drawn and tracked here
+   (System 6 has no pop-up menu control). */
 #define kPrefsRestoreBox 1
+#define kPrefsFontPop    3
+#define kPrefsSizePop    4
+#define kPrefsLEPop      6
+#define kPrefsStylePop   8
+/* Menu IDs for the pop-ups, inserted only while one is open. */
+#define kPopFontMenuID   140
+#define kPopSizeMenuID   141
+#define kPopLEMenuID     142
+#define kPopStyleMenuID  143
 
 #define kFormatBold 1
 #define kFormatItalic 2
@@ -99,6 +111,7 @@
 #define UC(c) ((unsigned char)(c))
 
 static void Initialize(void);
+static void ApplyFontPref(void);
 static void OpenFromFinderLaunch(void);
 static void HandleMouse(EventRecord *ev);
 static void HandleKey(EventRecord *ev);
@@ -149,6 +162,7 @@ static void Initialize(void)
     /* Before any document opens, so launch-time opens land in Open
        Recent and the saved folders are available. */
     PrefsLoad();
+    ApplyFontPref();
     RebuildRecentMenu();
     {
         Rect r;
@@ -184,10 +198,261 @@ static void RestoreSession(void)
 
 /* ---- Edit > Preferences ----
 
-   A modeless window (close box, no OK/Cancel). Toggling the checkbox
-   takes effect and is written to the prefs file immediately. */
+   A modeless window (close box, no OK/Cancel). Every change takes
+   effect and is written to the prefs file immediately. */
 
 static DialogPtr gPrefsDlg = NULL;
+static UserItemUPP gPopDrawUPP = NULL;
+
+/* The editor font from prefs, as a font number. No saved font, or one
+   that's no longer installed, means Geneva (or the application font if
+   even Geneva is missing). GetFNum gives 0 both for the system font
+   and for a missing font, so tell those apart by name. */
+static void ApplyFontPref(void)
+{
+    Str255 name, sysName;
+    short size, num = applFont, n = 0;
+    GetFNum("\pGeneva", &n);
+    if (n != 0)
+        num = n;
+    n = 0;
+    PrefsGetFont(name, &size);
+    if (name[0] != 0)
+    {
+        GetFNum(name, &n);
+        if (n != 0)
+            num = n;
+        else
+        {
+            GetFontName(systemFont, sysName);
+            if (EqualString(name, sysName, false, true))
+                num = systemFont;
+        }
+    }
+    DocSetTextStyle(num, size);
+}
+
+typedef struct {
+    short item;          /* DITL item */
+    short menuID;
+    MenuHandle menu;
+    short sel;           /* current item, 1-based */
+} PopUp;
+
+static PopUp gPops[4] = {
+    { kPrefsFontPop,  kPopFontMenuID,  NULL, 1 },
+    { kPrefsSizePop,  kPopSizeMenuID,  NULL, 1 },
+    { kPrefsLEPop,    kPopLEMenuID,    NULL, 1 },
+    { kPrefsStylePop, kPopStyleMenuID, NULL, 1 },
+};
+static const short kSizes[] = { 9, 10, 12, 14, 18 };
+#define kNumSizes ((short)(sizeof(kSizes) / sizeof(kSizes[0])))
+
+static PopUp *FindPop(short item)
+{
+    short i;
+    for (i = 0; i < 4; i++)
+        if (gPops[i].item == item)
+            return &gPops[i];
+    return NULL;
+}
+
+/* Sizes the current font has as a bitmap are outlined, like a Size
+   menu: those look best on screen. */
+static void MarkRealSizes(void)
+{
+    short i;
+    for (i = 0; i < kNumSizes; i++)
+        SetItemStyle(gPops[1].menu, i + 1,
+                     RealFont(MdBaseFont(), kSizes[i]) ? outline : 0);
+}
+
+/* Add items by text alone: AppendMenu would read "(" in "(CR)" as
+   "disable this item" (and ; ^ ! < / as other codes). */
+static void AppendItems(MenuHandle m, const unsigned char *const *items, short n)
+{
+    short i, base = CountMItems(m);
+    for (i = 0; i < n; i++)
+    {
+        AppendMenu(m, "\px");
+        SetMenuItemText(m, base + i + 1, items[i]);
+    }
+}
+
+static const unsigned char *const kLEItems[] = {
+    "\pMac line endings (CR)",       /* kLE_CR */
+    "\pUnix line endings (LF)",      /* kLE_LF */
+    "\pWindows line endings (CR+LF)" /* kLE_CRLF */
+};
+static const unsigned char *const kStyleItems[] = {
+    "\pAlways", "\pIn files under 16K", "\pIn files under 8K",
+    "\pIn files under 4K", "\pNever"   /* kPrefsStyle* order */
+};
+
+static void BuildPopUps(void)
+{
+    Str255 name, cur;
+    short size, i, n;
+    MenuHandle m;
+
+    /* Font: every installed font. Show the one in use (the system
+       font if the saved one is gone). */
+    m = gPops[0].menu = NewMenu(kPopFontMenuID, "\p");
+    AppendResMenu(m, 'FONT');
+    GetFontName(MdBaseFont(), cur);
+    if (cur[0] == 0)                       /* applFont has no name of */
+        GetFontName(applFont, cur);        /* its own on some Systems  */
+    if (cur[0] == 0)
+        PStrCopy(cur, "\pGeneva");
+    n = CountMItems(m);
+    gPops[0].sel = 1;
+    for (i = 1; i <= n; i++)
+    {
+        GetMenuItemText(m, i, name);
+        if (EqualString(name, cur, false, true)) { gPops[0].sel = i; break; }
+    }
+
+    m = gPops[1].menu = NewMenu(kPopSizeMenuID, "\p");
+    PrefsGetFont(name, &size);
+    gPops[1].sel = 1;
+    for (i = 0; i < kNumSizes; i++)
+    {
+        Str15 num;
+        const unsigned char *one = num;
+        NumToString(kSizes[i], num);
+        AppendItems(m, &one, 1);
+        if (kSizes[i] == MdBaseSize())
+            gPops[1].sel = i + 1;
+    }
+    MarkRealSizes();
+
+    m = gPops[2].menu = NewMenu(kPopLEMenuID, "\p");
+    AppendItems(m, kLEItems, 3);
+    gPops[2].sel = (short)PrefsGetNewLineEnding() + 1;   /* kLE_CR = 0 ... */
+
+    m = gPops[3].menu = NewMenu(kPopStyleMenuID, "\p");
+    AppendItems(m, kStyleItems, 5);
+    gPops[3].sel = PrefsGetStyleLimit() + 1;
+}
+
+static void DisposePopUps(void)
+{
+    short i;
+    for (i = 0; i < 4; i++)
+        if (gPops[i].menu != NULL)
+        {
+            DisposeMenu(gPops[i].menu);
+            gPops[i].menu = NULL;
+        }
+}
+
+/* System 7-style pop-up box: framed, drop shadow, current choice and
+   a down triangle. */
+static pascal void DrawPopUpItem(DialogPtr d, short item)
+{
+    PopUp *p = FindPop(item);
+    short itype;
+    Handle ihdl;
+    Rect r, box;
+    Str255 text;
+    short maxW, h;
+    PolyHandle tri;
+
+    if (p == NULL || p->menu == NULL)
+        return;
+    GetDialogItem(d, item, &itype, &ihdl, &r);
+
+    box = r;
+    box.right--; box.bottom--;
+    EraseRect(&r);
+    FrameRect(&box);
+    MoveTo(box.left + 2, box.bottom);
+    LineTo(box.right, box.bottom);
+    LineTo(box.right, box.top + 2);
+
+    GetMenuItemText(p->menu, p->sel, text);
+    maxW = (box.right - box.left) - 26;
+    while (text[0] > 1 && StringWidth(text) > maxW)
+    {
+        text[0]--;
+        text[text[0]] = 0xC9;    /* ellipsis */
+    }
+    MoveTo(box.left + 8, box.bottom - 5);
+    DrawString(text);
+
+    /* Down triangle, 11 wide. */
+    h = box.right - 18;
+    tri = OpenPoly();
+    MoveTo(h, box.top + 7);
+    LineTo(h + 10, box.top + 7);
+    LineTo(h + 5, box.top + 12);
+    LineTo(h, box.top + 7);
+    ClosePoly();
+    PaintPoly(tri);
+    KillPoly(tri);
+}
+
+static void RedrawPopUp(short item)
+{
+    GrafPtr saved;
+    GetPort(&saved);
+    SetPort((GrafPtr)gPrefsDlg);
+    DrawPopUpItem(gPrefsDlg, item);
+    SetPort(saved);
+}
+
+/* Track a click in a pop-up; apply and save the new choice. */
+static void TrackPopUp(PopUp *p)
+{
+    short itype, i, n;
+    Handle ihdl;
+    Rect r;
+    Point pt;
+    long result;
+    short chosen;
+
+    GetDialogItem(gPrefsDlg, p->item, &itype, &ihdl, &r);
+    SetPort((GrafPtr)gPrefsDlg);
+    pt.v = r.top + 1;
+    pt.h = r.left + 1;
+    LocalToGlobal(&pt);
+
+    n = CountMItems(p->menu);
+    for (i = 1; i <= n; i++)
+        CheckItem(p->menu, i, i == p->sel);
+    InsertMenu(p->menu, -1);
+    result = PopUpMenuSelect(p->menu, pt.v, pt.h, p->sel);
+    DeleteMenu(p->menuID);
+
+    chosen = LoWord(result);
+    if (HiWord(result) == 0 || chosen == p->sel)
+        return;
+    p->sel = chosen;
+    RedrawPopUp(p->item);
+
+    switch (p->item)
+    {
+    case kPrefsFontPop:
+    case kPrefsSizePop:
+    {
+        Str255 name;
+        GetMenuItemText(gPops[0].menu, gPops[0].sel, name);
+        PrefsSetFont(name, kSizes[gPops[1].sel - 1]);
+        ApplyFontPref();
+        if (p->item == kPrefsFontPop)
+            MarkRealSizes();
+        break;
+    }
+    case kPrefsLEPop:
+        PrefsSetNewLineEnding((LineEndKind)(chosen - 1));
+        break;
+    case kPrefsStylePop:
+        PrefsSetStyleLimit(chosen - 1);
+        DocApplyStyleLimit();
+        break;
+    }
+    PrefsSave();
+}
 
 static Boolean PrefsWindowIsFront(void)
 {
@@ -200,11 +465,12 @@ static void PrefsWindowClose(void)
         return;
     DisposeDialog(gPrefsDlg);
     gPrefsDlg = NULL;
+    DisposePopUps();
 }
 
 static void DoPreferences(void)
 {
-    short itype;
+    short itype, i;
     Handle ihdl;
     Rect ir;
 
@@ -218,6 +484,16 @@ static void DoPreferences(void)
         return;
     GetDialogItem(gPrefsDlg, kPrefsRestoreBox, &itype, &ihdl, &ir);
     SetControlValue((ControlHandle)ihdl, PrefsGetRestoreSession() ? 1 : 0);
+
+    BuildPopUps();
+    if (gPopDrawUPP == NULL)
+        gPopDrawUPP = NewUserItemProc(DrawPopUpItem);
+    for (i = 0; i < 4; i++)
+    {
+        GetDialogItem(gPrefsDlg, gPops[i].item, &itype, &ihdl, &ir);
+        SetDialogItem(gPrefsDlg, gPops[i].item, itype, (Handle)gPopDrawUPP, &ir);
+    }
+
     ShowWindow((WindowPtr)gPrefsDlg);
     SelectWindow((WindowPtr)gPrefsDlg);
 }
@@ -245,18 +521,24 @@ static Boolean HandlePrefsEvent(EventRecord *ev)
     if (!IsDialogEvent(ev))
         return false;
 
-    if (DialogSelect(ev, &hitDlg, &item) && hitDlg == gPrefsDlg
-        && item == kPrefsRestoreBox)
+    if (DialogSelect(ev, &hitDlg, &item) && hitDlg == gPrefsDlg)
     {
-        short itype;
-        Handle ihdl;
-        Rect ir;
-        ControlHandle box;
-        GetDialogItem(gPrefsDlg, kPrefsRestoreBox, &itype, &ihdl, &ir);
-        box = (ControlHandle)ihdl;
-        SetControlValue(box, 1 - GetControlValue(box));
-        PrefsSetRestoreSession(GetControlValue(box) != 0);
-        PrefsSave();
+        if (item == kPrefsRestoreBox)
+        {
+            short itype;
+            Handle ihdl;
+            Rect ir;
+            ControlHandle box;
+            GetDialogItem(gPrefsDlg, kPrefsRestoreBox, &itype, &ihdl, &ir);
+            box = (ControlHandle)ihdl;
+            SetControlValue(box, 1 - GetControlValue(box));
+            PrefsSetRestoreSession(GetControlValue(box) != 0);
+            PrefsSave();
+        }
+        else if (FindPop(item) != NULL)
+        {
+            TrackPopUp(FindPop(item));
+        }
     }
     return true;
 }
@@ -482,14 +764,14 @@ static void ResetInsertStyleToPlain(DocState *doc)
         return;
     crPos = pos - 1;
 
-    plain.tsFont = 0;
+    plain.tsFont = MdBaseFont();
     plain.tsFace = 0;
-    plain.tsSize = 12;
+    plain.tsSize = MdBaseSize();
     plain.tsColor.red = plain.tsColor.green = plain.tsColor.blue = 0;
 
     BeginClipSuppress(&cs, doc->window);
     TESetSelect(crPos, pos, doc->te);
-    TESetStyle(doFace | doSize, &plain, false, doc->te);
+    TESetStyle(doFont | doFace | doSize, &plain, false, doc->te);
     TESetSelect(pos, pos, doc->te);
     EndClipSuppress(&cs);
 }

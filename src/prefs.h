@@ -2,6 +2,7 @@
 #define MacDown_PREFS_H
 
 #include <Types.h>
+#include "file_io.h"   /* LineEndKind */
 
 /* Persistent preferences, stored in "MacDown Prefs" in the Preferences
    folder (System 7) or the System Folder (System 6).
@@ -64,6 +65,30 @@ Boolean PrefsOpenDocGet(short index, short *outVRef, long *outDirID,
 void    PrefsSetBrowserWindow(Boolean open, const Rect *globalBounds);
 Boolean PrefsGetBrowserOpen(void);
 Boolean PrefsGetBrowserBounds(Rect *outGlobalBounds);
+
+/* Editor font, stored by name (font numbers differ between systems).
+   An empty name means Geneva; size defaults to 12. */
+void    PrefsGetFont(StringPtr outName, short *outSize);
+void    PrefsSetFont(ConstStr255Param name, short size);
+
+/* Line endings for new (untitled) documents. Opened files keep theirs. */
+LineEndKind PrefsGetNewLineEnding(void);
+void    PrefsSetNewLineEnding(LineEndKind le);
+
+/* Markdown styling: always, only for files under a size, or never.
+   Decided when a document opens. The values are also the Preferences
+   pop-up's item numbers minus one. */
+enum {
+    kPrefsStyleAlways = 0,
+    kPrefsStyleUnder16K,
+    kPrefsStyleUnder8K,
+    kPrefsStyleUnder4K,
+    kPrefsStyleNever
+};
+short   PrefsGetStyleLimit(void);
+void    PrefsSetStyleLimit(short which);
+/* Style documents shorter than this many bytes. */
+long    PrefsStyleLimitBytes(void);
 
 /* True if (vRefNum, dirID) names an existing directory right now. */
 Boolean PrefsFolderExists(short vRefNum, long dirID);

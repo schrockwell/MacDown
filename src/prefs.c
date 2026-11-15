@@ -20,7 +20,7 @@
 #endif
 
 #define kPrefsMagic   'MDpf'
-#define kPrefsVersion 3
+#define kPrefsVersion 4
 #define kPrefsType    'pref'
 #define kPrefsCreator 'MDED'
 
@@ -58,11 +58,19 @@ typedef struct {
     /* ---- version 3 ---- (version 2 files end here) */
     Rect         openDocBounds[kPrefsMaxOpenDocs];  /* global content rects;
                                                        empty = not known */
+    /* ---- version 4 ---- (version 3 files end here). Zero for every
+       field means the old behavior: Geneva 12, CR, always style. */
+    short        fontSize;         /* 0 = 12 */
+    short        styleLimit;       /* kPrefsStyle* */
+    char         newLineEnding;    /* LineEndKind for new documents */
+    char         pad3;
+    Str63        fontName;         /* empty = Geneva */
 } PrefsRecord;
 
 /* Bytes older prefs files hold (each a prefix of the current layout). */
 #define kPrefsV1Size offsetof(PrefsRecord, restoreSession)
 #define kPrefsV2Size offsetof(PrefsRecord, openDocBounds)
+#define kPrefsV3Size offsetof(PrefsRecord, fontSize)
 
 static PrefsRecord gPrefs;
 
@@ -191,6 +199,9 @@ void PrefsLoad(void)
     {
         if (rec.version == kPrefsVersion && count == sizeof(rec)) {
             gPrefs = rec;
+        } else if (rec.version == 3 && count >= (long)kPrefsV3Size) {
+            BlockMoveData(&rec, &gPrefs, kPrefsV3Size);
+            gPrefs.version = kPrefsVersion;
         } else if (rec.version == 2 && count >= (long)kPrefsV2Size) {
             BlockMoveData(&rec, &gPrefs, kPrefsV2Size);
             gPrefs.version = kPrefsVersion;
@@ -202,6 +213,12 @@ void PrefsLoad(void)
         if (gPrefs.recentCount < 0) gPrefs.recentCount = 0;
         if (gPrefs.recentCount > kPrefsMaxRecent)
             gPrefs.recentCount = kPrefsMaxRecent;
+        if (gPrefs.styleLimit < 0 || gPrefs.styleLimit > kPrefsStyleNever)
+            gPrefs.styleLimit = kPrefsStyleAlways;
+        if (gPrefs.newLineEnding < kLE_CR || gPrefs.newLineEnding > kLE_CRLF)
+            gPrefs.newLineEnding = kLE_CR;
+        if (gPrefs.fontSize < 0 || gPrefs.fontSize > 72) gPrefs.fontSize = 0;
+        if (gPrefs.fontName[0] > 63) gPrefs.fontName[0] = 0;
         if (gPrefs.openDocCount < 0) gPrefs.openDocCount = 0;
         if (gPrefs.openDocCount > kPrefsMaxOpenDocs)
             gPrefs.openDocCount = kPrefsMaxOpenDocs;
@@ -394,4 +411,51 @@ Boolean PrefsGetBrowserBounds(Rect *outGlobalBounds)
     if (!gPrefs.browserBoundsValid) return false;
     *outGlobalBounds = gPrefs.browserBounds;
     return true;
+}
+
+/* ---- editor text ---- */
+
+void PrefsGetFont(StringPtr outName, short *outSize)
+{
+    PStrCopy(outName, gPrefs.fontName);
+    *outSize = (gPrefs.fontSize > 0) ? gPrefs.fontSize : 12;
+}
+
+void PrefsSetFont(ConstStr255Param name, short size)
+{
+    if (name[0] > 63) return;
+    PStrCopy(gPrefs.fontName, name);
+    gPrefs.fontSize = size;
+}
+
+LineEndKind PrefsGetNewLineEnding(void)
+{
+    return (LineEndKind)gPrefs.newLineEnding;
+}
+
+void PrefsSetNewLineEnding(LineEndKind le)
+{
+    gPrefs.newLineEnding = (char)le;
+}
+
+short PrefsGetStyleLimit(void)
+{
+    return gPrefs.styleLimit;
+}
+
+void PrefsSetStyleLimit(short which)
+{
+    if (which >= kPrefsStyleAlways && which <= kPrefsStyleNever)
+        gPrefs.styleLimit = which;
+}
+
+long PrefsStyleLimitBytes(void)
+{
+    switch (gPrefs.styleLimit) {
+        case kPrefsStyleUnder16K: return 16L * 1024;
+        case kPrefsStyleUnder8K:  return 8L * 1024;
+        case kPrefsStyleUnder4K:  return 4L * 1024;
+        case kPrefsStyleNever:    return 0;
+        default:                  return 0x7FFFFFFFL;
+    }
 }

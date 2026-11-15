@@ -106,6 +106,33 @@ static Boolean IsWordChar(char c)
            u >= 0x80;  /* MacRoman extended chars treated as word chars */
 }
 
+/* ---- base text style (Edit > Preferences font and size) ---- */
+
+static short sBaseFont = kFontIDGeneva;   /* Geneva 12: what TextEdit used before the pref */
+static short sBaseSize = 12;
+
+void MdSetBaseStyle(short fontNum, short size)
+{
+    sBaseFont = fontNum;
+    sBaseSize = (size > 0) ? size : 12;
+}
+
+short MdBaseFont(void) { return sBaseFont; }
+short MdBaseSize(void) { return sBaseSize; }
+
+static void BaseStyle(TextStyle *ts)
+{
+    ts->tsFont = sBaseFont;
+    ts->tsFace = 0;
+    ts->tsSize = sBaseSize;
+    ts->tsColor.red = ts->tsColor.green = ts->tsColor.blue = 0;
+}
+
+static Boolean IsBaseStyle(const TextStyle *ts)
+{
+    return ts->tsFace == 0 && ts->tsSize == sBaseSize && ts->tsFont == sBaseFont;
+}
+
 /* Counter of "real" style mutations applied since the last consume.
    DocFlushRestyle reads it after restyling its dirty range to decide
    whether the on-screen repaint is needed at all. */
@@ -202,7 +229,7 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
     short savedStart, savedEnd;
     short lineLen;
     TextStyle base;
-    short faceMask = doFace | doSize;
+    short faceMask = doFont | doFace | doSize;
     CharsHandle ch;
     char *text;
     MdLineKind kind;
@@ -239,17 +266,14 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
         if (canSkip) {
             TEGetStyle(lineStart, &current, &lh, &fa, te);
-            if (current.tsFace == 0 && current.tsSize == 12)
+            if (IsBaseStyle(&current))
                 return;
         }
     }
 
-    /* Reset the whole line to plain size 12 first so previous styling
-       doesn't leak. Font is left alone -- we don't restyle by font. */
-    base.tsFont = 0;
-    base.tsFace = 0;
-    base.tsSize = 12;
-    base.tsColor.red = base.tsColor.green = base.tsColor.blue = 0;
+    /* Reset the whole line to the base style first so previous styling
+       doesn't leak. */
+    BaseStyle(&base);
 
     TESetSelect(lineStart, lineEnd, te);
     TESetStyle(faceMask, &base, false, te);
@@ -266,9 +290,8 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
 
     kind = MdClassifyLine(text, lineLen);
 
-    /* Headings get distinct faces but all stay at size 12, so line
-       heights never change and callers never need TECalText. */
-    base.tsSize = 12;
+    /* Headings get distinct faces but all stay at the base size, so
+       line heights never change and callers never need TECalText. */
     switch (kind) {
         case kLine_H1:
         case kLine_H2: base.tsFace = bold | underline; break;
@@ -293,7 +316,7 @@ void MdRestyleLine(TEHandle te, short lineStart, short lineEnd)
     TESetSelect(savedStart, savedEnd, te);
 }
 
-void MdRestyleAll(TEHandle te)
+void MdStyleAll(TEHandle te, Boolean markdown)
 {
     short len = (**te).teLength;
     short start = 0;
@@ -302,7 +325,7 @@ void MdRestyleAll(TEHandle te)
     CharsHandle ch;
     char *text;
     TextStyle base;
-    short faceMask = doFace | doSize;
+    short faceMask = doFont | doFace | doSize;
     GrafPtr savedPort = NULL;
     GrafPtr inPort = (**te).inPort;
     RgnHandle savedClip = NULL;
@@ -325,18 +348,27 @@ void MdRestyleAll(TEHandle te)
     savedStart = (**te).selStart;
     savedEnd   = (**te).selEnd;
 
-    /* Reset the entire document to plain size 12 in a single call,
+    /* Reset the entire document to the base style in a single call,
        instead of repeating that reset on every line. For a long mostly-
-       plain doc this collapses N TESetStyle reset calls into 1. */
-    base.tsFont = 0;
-    base.tsFace = 0;
-    base.tsSize = 12;
-    base.tsColor.red = base.tsColor.green = base.tsColor.blue = 0;
+       plain doc this collapses N TESetStyle reset calls into 1. An
+       empty document has no text to restyle, so put a character in,
+       style it and delete it: TextEdit keeps the style of deleted text
+       for whatever is typed next, on every System version. */
+    BaseStyle(&base);
     if (len > 0) {
         TESetSelect(0, len, te);
         TESetStyle(faceMask, &base, false, te);
         sStyleChanges++;
+    } else {
+        TESetSelect(0, 0, te);
+        TEInsert(" ", 1, te);
+        TESetSelect(0, 1, te);
+        TESetStyle(faceMask, &base, false, te);
+        TEDelete(te);
+        savedStart = savedEnd = 0;
     }
+
+    if (!markdown) len = 0;   /* plain text: skip the line scan */
 
     ch = TEGetText(te);
     HLock((Handle)ch);
@@ -351,10 +383,9 @@ void MdRestyleAll(TEHandle te)
 
             /* Plain lines already have the default style from the
                document-wide reset above -- skip the per-line TESetStyle.
-               All heading levels stay at size 12 so line heights are
+               All heading levels stay at the base size so line heights are
                uniform and TECalText is never needed. */
             if (kind >= kLine_H1 && kind <= kLine_H6) {
-                base.tsSize = 12;
                 if (kind == kLine_H1 || kind == kLine_H2)
                     base.tsFace = bold | underline;
                 else
@@ -383,8 +414,9 @@ void MdRestyleAll(TEHandle te)
         SetPort(savedPort);
     }
 
-    /* No TECalText needed: every style we apply is size 12, so line
-       heights computed at TESetText time stay correct. */
+    /* No TECalText needed when only faces change: every style we apply
+       is the base size. (A font or size change does need one; that's
+       the caller's job, see DocSetTextStyle.) */
 }
 
 /* ---- list continuation marker ---- */

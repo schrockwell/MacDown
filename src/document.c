@@ -239,6 +239,7 @@ static void ComputeTERects(WindowPtr w, Rect *destR, Rect *viewR)
 }
 
 /* Cached uniform line height (definition lives further down). */
+static short sCachedLineHeight = 0;   /* see LineHeight() */
 static short LineHeight(TEHandle te);
 static short LineIndexForOffset(DocState *doc, short offset);
 
@@ -340,7 +341,8 @@ DocState *DocNew(void)
     doc = (DocState *)NewPtrClear(sizeof(DocState));
     if (doc == NULL)
         return NULL;
-    doc->leKind = kLE_CR;
+    doc->leKind = PrefsGetNewLineEnding();
+    doc->styled = (PrefsStyleLimitBytes() > 0);
     doc->dirtyLineStart = -1;
     doc->dirtyLineEnd = -1;
 
@@ -377,6 +379,9 @@ DocState *DocNew(void)
     doc->window = w;
     SetWRefCon(w, (long)doc);
 
+    /* TEStyleNew takes its initial style from the port. */
+    TextFont(MdBaseFont());
+    TextSize(MdBaseSize());
     ComputeTERects(w, &destR, &viewR);
     doc->te = TEStyleNew(&destR, &viewR);
     TEAutoView(true, doc->te);
@@ -641,7 +646,8 @@ static Boolean DocOpenAt(short vRefNum, long dirID, ConstStr255Param name,
     doc->dirty = false;
     DocClearUndo(doc);
 
-    MdRestyleAll(doc->te);
+    doc->styled = (len < PrefsStyleLimitBytes());
+    MdStyleAll(doc->te, doc->styled);
     TESetSelect(0, 0, doc->te);
     doc->selAnchor = 0;
 
@@ -925,6 +931,8 @@ Boolean DocSaveAs(DocState *doc)
     }
 
     PStrCopy(doc->fileName, reply.fName);
+    if (!doc->hasFile)
+        doc->leKind = PrefsGetNewLineEnding();   /* may have changed since New */
     doc->hasFile = true;
 
     if (!DocSave(doc))
@@ -957,11 +965,59 @@ Boolean DocPromptSaveIfDirty(DocState *doc)
 
 /* ---- window plumbing ---- */
 
+/* Reflow anchors. Line breaks move when the width or font changes, so
+   remember the first character of the top visible line (plus any
+   sub-line pixel offset) rather than a line number or pixel value,
+   then scroll back to it after TECalText. */
+static short TopAnchor(DocState *doc, short lh, long *outRemainder)
+{
+    TEHandle te = doc->te;
+    short nLines = (**te).nLines;
+    long scrolled = (long)(**te).viewRect.top - (long)(**te).destRect.top;
+
+    *outRemainder = 0;
+    if (lh > 0 && scrolled > 0 && nLines > 0)
+    {
+        long topLine = scrolled / lh;
+        if (topLine > nLines - 1)
+            topLine = nLines - 1;
+        *outRemainder = scrolled - topLine * lh;
+        return (**te).lineStarts[topLine];
+    }
+    return 0;
+}
+
+/* After TECalText: scroll so `topOffset`'s line is at the top again.
+   destRect.top/bottom must hold their unscrolled values on entry. */
+static void ScrollToAnchor(DocState *doc, short topOffset, long remainder)
+{
+    TEHandle te = doc->te;
+    short lh = LineHeight(te);
+    Rect viewR = (**te).viewRect;
+    long newScroll = 0, maxScroll;
+
+    if (topOffset > 0 || remainder > 0)
+    {
+        newScroll = (long)LineIndexForOffset(doc, topOffset) * lh + remainder;
+        maxScroll = (long)(**te).nLines * lh - (viewR.bottom - viewR.top);
+        if (newScroll > maxScroll)
+            newScroll = maxScroll;
+        if (newScroll < 0)
+            newScroll = 0;
+        if (newScroll > 32767L)
+            newScroll = 32767L;
+    }
+    (**te).destRect.top    -= (short)newScroll;
+    (**te).destRect.bottom -= (short)newScroll;
+}
+
 void DocResize(DocState *doc)
 {
     Rect destR, viewR;
     WindowPtr w = doc->window;
     GrafPtr savedPort;
+    short topOffset;
+    long remainder;
     if (!w)
         return;
 
@@ -972,54 +1028,86 @@ void DocResize(DocState *doc)
     MoveControl(doc->vScroll, w->portRect.right - kMdScrollWidth, -1);
     SizeControl(doc->vScroll, kMdScrollWidth + 1, w->portRect.bottom - 14);
 
-    /* Remember the first character of the top visible line (plus any
-       sub-line pixel offset) so the reflow doesn't jump back to the top
-       of the document. Line breaks move when the width changes, so
-       anchor on a character offset, not a line number or pixel value. */
-    {
-        TEHandle te = doc->te;
-        short lh = LineHeight(te);
-        short nLines = (**te).nLines;
-        long scrolled = (long)(**te).viewRect.top - (long)(**te).destRect.top;
-        long remainder = 0;
-        short topOffset = 0;
-        short viewH;
-        long newScroll, maxScroll;
+    topOffset = TopAnchor(doc, LineHeight(doc->te), &remainder);
+    ComputeTERects(w, &destR, &viewR);
+    (**doc->te).destRect = destR;
+    (**doc->te).viewRect = viewR;
+    TECalText(doc->te);
+    ScrollToAnchor(doc, topOffset, remainder);
 
-        if (lh > 0 && scrolled > 0 && nLines > 0)
-        {
-            long topLine = scrolled / lh;
-            if (topLine > nLines - 1)
-                topLine = nLines - 1;
-            remainder = scrolled - topLine * lh;
-            topOffset = (**te).lineStarts[topLine];
-        }
-
-        ComputeTERects(w, &destR, &viewR);
-        (**te).destRect = destR;
-        (**te).viewRect = viewR;
-        TECalText(te);
-
-        newScroll = 0;
-        if (topOffset > 0 || remainder > 0)
-        {
-            newScroll = (long)LineIndexForOffset(doc, topOffset) * lh + remainder;
-            viewH = viewR.bottom - viewR.top;
-            maxScroll = (long)(**te).nLines * lh - viewH;
-            if (newScroll > maxScroll)
-                newScroll = maxScroll;
-            if (newScroll < 0)
-                newScroll = 0;
-            if (newScroll > 32767L)
-                newScroll = 32767L;
-        }
-        (**te).destRect.top    = destR.top - (short)newScroll;
-        (**te).destRect.bottom = destR.bottom - (short)newScroll;
-    }
     DocAdjustScrollbar(doc);
     InvalRect(&w->portRect);
 
     SetPort(savedPort);
+}
+
+/* Re-run the style pass on one document (font, size and/or Markdown
+   styling changed), keeping its selection and its place. oldLineH is
+   the line height before a font change, or 0 if the font is the same. */
+static void RestyleDocument(DocState *doc, short oldLineH)
+{
+    Boolean reflow = (oldLineH > 0);
+    TEHandle te = doc->te;
+    GrafPtr savedPort;
+    short selStart = (**te).selStart, selEnd = (**te).selEnd;
+    short topOffset = 0;
+    long remainder = 0;
+    Rect destR, viewR;
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    if (reflow)
+        topOffset = TopAnchor(doc, oldLineH, &remainder);
+
+    doc->dirtyLineStart = doc->dirtyLineEnd = -1;
+    MdStyleAll(te, doc->styled);
+    TESetSelect(selStart, selEnd, te);
+
+    if (reflow)
+    {
+        TextFont(MdBaseFont());
+        TextSize(MdBaseSize());
+        ComputeTERects(doc->window, &destR, &viewR);
+        (**te).destRect = destR;
+        (**te).viewRect = viewR;
+        TECalText(te);
+        ScrollToAnchor(doc, topOffset, 0);   /* old remainder is in old pixels */
+    }
+
+    DocAdjustScrollbar(doc);
+    EraseRect(&doc->window->portRect);
+    InvalRect(&doc->window->portRect);
+    SetPort(savedPort);
+}
+
+void DocSetTextStyle(short fontNum, short size)
+{
+    DocState *d;
+    short oldLineH;
+    if (fontNum == MdBaseFont() && size == MdBaseSize())
+        return;
+    /* Every document shares one line height, so measure the old one
+       before switching (all anchors are taken in old pixels). */
+    oldLineH = (gDocs != NULL) ? LineHeight(gDocs->te) : 0;
+    MdSetBaseStyle(fontNum, size);
+    sCachedLineHeight = 0;
+    for (d = gDocs; d != NULL; d = d->next)
+        RestyleDocument(d, oldLineH);
+}
+
+void DocApplyStyleLimit(void)
+{
+    DocState *d;
+    long limit = PrefsStyleLimitBytes();
+    for (d = gDocs; d != NULL; d = d->next)
+    {
+        Boolean want = ((long)(**d->te).teLength < limit);
+        if (want != d->styled)
+        {
+            d->styled = want;
+            RestyleDocument(d, 0);
+        }
+    }
 }
 
 void DocUpdate(DocState *doc)
@@ -1326,7 +1414,8 @@ void DocMarkLineDirty(DocState *doc, short pos)
             short lh, fa;
             HUnlock((Handle)ch);
             TEGetStyle(lineStart, &current, &lh, &fa, doc->te);
-            if (current.tsFace == 0 && current.tsSize == 12)
+            if (current.tsFace == 0 && current.tsSize == MdBaseSize()
+                && current.tsFont == MdBaseFont())
                 return;
             HLock((Handle)ch);
         }
@@ -1350,14 +1439,31 @@ void DocMarkLineDirty(DocState *doc, short pos)
 
 /* ---- restyling on idle ---- */
 
-/* Cached line height (uniform across all docs because every style we
-   apply is size 12). Set on first use; never invalidated. */
-static short sCachedLineHeight = 0;
-
+/* Cached line height (uniform across all docs because every run is the
+   base font and size). Set on first use; reset by DocSetTextStyle.
+   Measured from the font rather than TEGetHeight so an empty document
+   still reports the new font's height. */
 static short LineHeight(TEHandle te)
 {
     if (sCachedLineHeight == 0)
-        sCachedLineHeight = TEGetHeight(1, 0, te);
+    {
+        GrafPtr saved, port = (**te).inPort;
+        short f, z;
+        Style face;
+        FontInfo fi;
+        GetPort(&saved);
+        SetPort(port);
+        f = port->txFont; z = port->txSize; face = port->txFace;
+        TextFont(MdBaseFont());
+        TextSize(MdBaseSize());
+        TextFace(0);
+        GetFontInfo(&fi);
+        TextFont(f); TextSize(z); TextFace(face);
+        SetPort(saved);
+        sCachedLineHeight = fi.ascent + fi.descent + fi.leading;
+        if (sCachedLineHeight <= 0)
+            sCachedLineHeight = TEGetHeight(1, 0, te);
+    }
     return sCachedLineHeight;
 }
 
@@ -1437,6 +1543,9 @@ void DocFlushRestyle(DocState *doc)
     end = doc->dirtyLineEnd;
     doc->dirtyLineStart = doc->dirtyLineEnd = -1;
 
+    if (!doc->styled)
+        return;   /* plain text: list renumbering only */
+
     startLineIdx = LineIndexForOffset(doc, start);
 
     GetPort(&savedPort);
@@ -1474,8 +1583,8 @@ void DocFlushRestyle(DocState *doc)
 
     HUnlock((Handle)ch);
 
-    /* No TECalText: the restyler only changes face/size, and every
-       size it applies is 12, so line heights never shift. */
+    /* No TECalText: the restyler only changes faces, and every run is
+       the base size, so line heights never shift. */
 
     SetClip(savedClip);
     DisposeRgn(savedClip);
@@ -2387,7 +2496,7 @@ void DocUndo(DocState *doc)
     doc->selAnchor = doc->undoSelStart;
     doc->leKind = doc->undoLE;
 
-    MdRestyleAll(doc->te);
+    MdStyleAll(doc->te, doc->styled);
 
     SetClip(savedClip);
     DisposeRgn(savedClip);

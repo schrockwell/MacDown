@@ -23,6 +23,7 @@ struct DocState
     Boolean hasFile;
     Boolean dirty;
     LineEndKind leKind;
+    Boolean styled;       /* Markdown styling on (see PrefsStyleLimitBytes) */
     short dirtyLineStart; /* -1 = clean */
     short dirtyLineEnd;
     long lastDirtyTick;
@@ -58,6 +59,13 @@ Boolean DocCloseAll(void);                   /* prompt-and-close every doc; fals
 /* Quit path: like DocCloseAll, but also records the documents that
    were open (window order) in prefs for session restore. */
 Boolean DocCloseAllForQuit(void);
+
+/* Edit > Preferences changed: restyle every open document in a new
+   font/size, keeping each window's place in its text. */
+void DocSetTextStyle(short fontNum, short size);
+/* Edit > Preferences changed the styling limit: turn Markdown styling
+   on or off for each open document by its current length. */
+void DocApplyStyleLimit(void);
 
 /* Lookup. */
 DocState *DocFromWindow(WindowPtr w);

@@ -38,9 +38,16 @@ void MdFindLineBounds(TEHandle te, short pos,
    selection. */
 void MdRestyleLine(TEHandle te, short lineStart, short lineEnd);
 
-/* Restyle every line in the document. Used on Open and on Format →
-   Re-style Document. */
-void MdRestyleAll(TEHandle te);
+/* Reset the whole document to the base style and, if `markdown`, style
+   every line. Drawing is suppressed; the caller invalidates. Used on
+   Open, Undo and when the font or styling preference changes. */
+void MdStyleAll(TEHandle te, Boolean markdown);
+
+/* The editor's font and size (Edit > Preferences). Every style run uses
+   them; Markdown styling only changes the face. Default: Geneva 12. */
+void  MdSetBaseStyle(short fontNum, short size);
+short MdBaseFont(void);
+short MdBaseSize(void);
 
 /* Returns and resets a counter of "real" style mutations performed by
    MdRestyleLine / MdRestyleAll since the last call. Used by
