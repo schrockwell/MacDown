@@ -5,8 +5,9 @@
 # format: modern users on any OS can unzip it, then route the .bin
 # through MacBinary-aware emulators or transfer the .dsk into Mini vMac.
 #
-# Every artifact is named MacDown-<version>.<ext> (the app inside the
-# .bin/.hqx/.dsk is still just "MacDown").
+# Every artifact is named MacDown-<version>.<ext>, and the application
+# inside the .bin/.hqx/.dsk/.img is named "MacDown <version>". The
+# build/ outputs keep the plain "MacDown" name.
 #
 # Usage: ./scripts/release.sh [version]
 #   version — optional (default: the contents of /VERSION)
@@ -23,6 +24,7 @@ if [ -z "$TAG" ]; then
     exit 1
 fi
 NAME="MacDown-$TAG"
+APP_NAME="MacDown $TAG"
 STAGE="$RELEASE_DIR/$NAME"
 
 # Always build first so the release reflects current source. Reuses the
@@ -32,20 +34,49 @@ echo "==> Building MacDown"
 
 BIN="$BUILD_DIR/MacDown.bin"
 DSK="$BUILD_DIR/MacDown.dsk"
-IMG="$BUILD_DIR/MacDown.img"
-HQX="$BUILD_DIR/MacDown.hqx"
-if [ ! -f "$BIN" ] || [ ! -f "$DSK" ] || [ ! -f "$IMG" ]; then
+if [ ! -f "$BIN" ] || [ ! -f "$DSK" ]; then
     echo "error: build outputs missing under $BUILD_DIR" >&2
     exit 1
 fi
 
-echo "==> Staging $NAME/"
+for tool in /usr/bin/macbinary /usr/bin/binhex; do
+    if [ ! -x "$tool" ]; then
+        echo "error: $tool not found — needs Apple's binhex/macbinary tools (macOS)" >&2
+        exit 1
+    fi
+done
+# hfsutils ship with the Retro68 toolchain; fall back to PATH.
+HFS_BIN="$PROJECT_ROOT/deps/retro68/Retro68-build/toolchain/bin"
+hfs() {
+    local t="$1"; shift
+    if [ -x "$HFS_BIN/$t" ]; then "$HFS_BIN/$t" "$@"; else "$t" "$@"; fi
+}
+
+echo "==> Staging $NAME/ (application named \"$APP_NAME\")"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp "$BIN" "$STAGE/$NAME.bin"
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/MacDown-release-XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+
+# .bin / .hqx: decode the build's MacBinary to a real two-fork file under
+# the versioned app name, then re-encode. Both containers embed the file
+# name, so this is what the app is called once unpacked on the Mac.
+/usr/bin/macbinary decode -C "$WORK" -o "$APP_NAME" "$BIN" >/dev/null
+/usr/bin/macbinary encode -t 2 -o "$STAGE/$NAME.bin" "$WORK/$APP_NAME" >/dev/null
+/usr/bin/binhex encode -o "$STAGE/$NAME.hqx" "$WORK/$APP_NAME" >/dev/null
+
+# .dsk: rename the app on the HFS floppy image, then rebuild the Disk
+# Copy 4.2 .img from it so both images match.
 cp "$DSK" "$STAGE/$NAME.dsk"
-cp "$IMG" "$STAGE/$NAME.img"
-[ -f "$HQX" ] && cp "$HQX" "$STAGE/$NAME.hqx"
+hfs hmount "$STAGE/$NAME.dsk" >/dev/null
+hfs hrename ":MacDown" ":$APP_NAME"
+hfs humount >/dev/null
+python3 "$PROJECT_ROOT/scripts/raw-to-dc42.py" \
+    "$STAGE/$NAME.dsk" "$STAGE/$NAME.img" MacDown >/dev/null
+if command -v SetFile >/dev/null 2>&1; then
+    SetFile -t dCp4 -c dCpy "$STAGE/$NAME.img"
+fi
 
 cat > "$STAGE/README.txt" <<EOF
 MacDown — a small Markdown editor for classic Mac OS (System 6.0.8+)
