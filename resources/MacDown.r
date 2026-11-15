@@ -72,6 +72,10 @@ resource 'MENU' (130, "Edit") {
         "-",                          noIcon, noKey,  noMark, plain;
         "Duplicate",                  noIcon, "D",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
+        "Find\0xC9",                  noIcon, "F",    noMark, plain;
+        "Find Again",                 noIcon, "G",    noMark, plain;
+        "Replace & Find Again",       noIcon, "=",    noMark, plain;
+        "-",                          noIcon, noKey,  noMark, plain;
         "Preferences\0xC9",            noIcon, ",",    noMark, plain;
     }
 };
@@ -366,6 +370,46 @@ resource 'DITL' (134, "Revert") {
         StaticText { disabled,
             "Revert to the saved version of \0xD2^0\0xD3? "
             "Your changes will be lost." };
+    }
+};
+
+/* ---- Edit > Find (modeless). Item numbers are used by src/find.c. ---- */
+
+resource 'DLOG' (135, "Find") {
+    { 50, 60, 178, 420 },
+    noGrowDocProc,
+    invisible,
+    goAway,
+    0x0,
+    135,
+    "Find",
+    centerMainScreen
+};
+
+resource 'DITL' (135, "Find") {
+    {
+        /* 1 */ { 96, 276, 116, 346 },
+        Button { enabled, "Find" };
+        /* 2 */ { 96, 190, 116, 264 },
+        Button { enabled, "Replace" };
+        /* 3 */ { 96, 86, 116, 178 },
+        Button { enabled, "Replace All" };
+        /* 4 */ { 13, 12, 29, 74 },
+        StaticText { disabled, "Find:" };
+        /* 5 */ { 13, 82, 29, 344 },
+        EditText { enabled, "" };
+        /* 6 */ { 41, 12, 57, 74 },
+        StaticText { disabled, "Replace:" };
+        /* 7 */ { 41, 82, 57, 344 },
+        EditText { enabled, "" };
+        /* 8 */ { 66, 80, 84, 190 },
+        CheckBox { enabled, "Match case" };
+        /* 9: status ("Not found.", "3 replacements.") */
+        { 67, 196, 83, 346 },
+        StaticText { disabled, "" };
+        /* 10: default-button outline around Find */
+        { 92, 272, 120, 350 },
+        UserItem { disabled };
     }
 };
 

@@ -2631,3 +2631,216 @@ Boolean DocRevert(DocState *doc)
         ShowError(kErrFolded);
     return true;
 }
+
+/* ---- Edit > Find / Replace ---- */
+
+/* Case folding for "Match case" off: ASCII plus the Mac Roman accented
+   letters, so "É" finds "é". */
+static unsigned char gFold[256];
+static Boolean gFoldReady = false;
+
+static void InitFold(void)
+{
+    static const unsigned char pairs[][2] = {
+        {0x87,0xE7},{0x88,0xCB},{0x89,0xE5},{0x8A,0x80},{0x8B,0xCC},
+        {0x8C,0x81},{0x8D,0x82},{0x8E,0x83},{0x8F,0xE9},{0x90,0xE6},
+        {0x91,0xE8},{0x92,0xEA},{0x93,0xED},{0x94,0xEB},{0x95,0xEC},
+        {0x96,0x84},{0x97,0xEE},{0x98,0xF1},{0x99,0xEF},{0x9A,0x85},
+        {0x9B,0xCD},{0x9C,0xF2},{0x9D,0xF4},{0x9E,0xF3},{0x9F,0x86},
+        {0xBE,0xAE},{0xBF,0xAF},{0xCF,0xCE},{0xD8,0xD9}
+    };
+    short i;
+    for (i = 0; i < 256; i++)
+        gFold[i] = (i >= 'a' && i <= 'z') ? (unsigned char)(i - 32)
+                                          : (unsigned char)i;
+    for (i = 0; i < (short)(sizeof(pairs) / sizeof(pairs[0])); i++)
+        gFold[pairs[i][0]] = pairs[i][1];
+    gFoldReady = true;
+}
+
+static Boolean MatchAt(const unsigned char *text, const unsigned char *pat,
+                       short n, Boolean matchCase)
+{
+    short k;
+    if (matchCase)
+    {
+        for (k = 0; k < n; k++)
+            if (text[k] != pat[k]) return false;
+    }
+    else
+    {
+        for (k = 0; k < n; k++)
+            if (gFold[text[k]] != gFold[pat[k]]) return false;
+    }
+    return true;
+}
+
+/* Offset of the next match at or after `from`, wrapping to the top;
+   -1 if none. */
+static short FindFrom(TEHandle te, ConstStr255Param pat, Boolean matchCase,
+                      short from)
+{
+    short n = pat[0], len = (**te).teLength, i, found = -1;
+    CharsHandle ch;
+    const unsigned char *text;
+
+    if (!gFoldReady) InitFold();
+    if (n == 0 || n > len)
+        return -1;
+    ch = TEGetText(te);
+    HLock((Handle)ch);
+    text = (const unsigned char *)*ch;
+    for (i = from; i <= len - n; i++)
+        if (MatchAt(text + i, pat + 1, n, matchCase)) { found = i; break; }
+    if (found < 0)
+        for (i = 0; i < from && i <= len - n; i++)
+            if (MatchAt(text + i, pat + 1, n, matchCase)) { found = i; break; }
+    HUnlock((Handle)ch);
+    return found;
+}
+
+Boolean DocFindNext(DocState *doc, ConstStr255Param pat, Boolean matchCase)
+{
+    short at;
+    if (doc == NULL)
+        return false;
+    at = FindFrom(doc->te, pat, matchCase, (**doc->te).selEnd);
+    if (at < 0)
+        return false;
+    DocBreakTypingRun(doc);
+    TESetSelect(at, at + pat[0], doc->te);
+    doc->selAnchor = at;
+    TESelView(doc->te);
+    DocAdjustScrollbar(doc);
+    return true;
+}
+
+static Boolean SelectionMatches(DocState *doc, ConstStr255Param pat,
+                                Boolean matchCase)
+{
+    short s0 = (**doc->te).selStart, s1 = (**doc->te).selEnd;
+    CharsHandle ch;
+    Boolean ok;
+    if (!gFoldReady) InitFold();
+    if (pat[0] == 0 || s1 - s0 != pat[0])
+        return false;
+    ch = TEGetText(doc->te);
+    HLock((Handle)ch);
+    ok = MatchAt((const unsigned char *)*ch + s0, pat + 1, pat[0], matchCase);
+    HUnlock((Handle)ch);
+    return ok;
+}
+
+Boolean DocReplaceSelection(DocState *doc, ConstStr255Param pat,
+                            ConstStr255Param repl, Boolean matchCase)
+{
+    short s0, ls, le, dummy, end;
+    ClipSuppress cs;
+
+    if (doc == NULL || !SelectionMatches(doc, pat, matchCase))
+        return false;
+    if ((long)(**doc->te).teLength - pat[0] + repl[0] > kMdMaxFileBytes)
+    {
+        SysBeep(1);
+        return false;
+    }
+    s0 = (**doc->te).selStart;
+    DocBeforeAction(doc);
+    BeginClipSuppress(&cs, doc->window);
+    TEDelete(doc->te);
+    if (repl[0] > 0)
+        TEInsert((Ptr)(repl + 1), repl[0], doc->te);
+    EndClipSuppress(&cs);
+    end = s0 + repl[0];
+    doc->selAnchor = end;
+    MdFindLineBounds(doc->te, s0, &ls, &dummy);
+    MdFindLineBounds(doc->te, end, &dummy, &le);
+    DocCommitEdit(doc, ls, le);
+    return true;
+}
+
+long DocReplaceAll(DocState *doc, ConstStr255Param pat,
+                   ConstStr255Param repl, Boolean matchCase)
+{
+    TEHandle te;
+    CharsHandle ch;
+    const unsigned char *text;
+    short n = pat[0], r = repl[0], len, i, caret;
+    long count = 0, newLen;
+    Handle out;
+    char *o;
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+
+    if (doc == NULL || n == 0)
+        return 0;
+    if (!gFoldReady) InitFold();
+    te = doc->te;
+    len = (**te).teLength;
+
+    ch = TEGetText(te);
+    HLock((Handle)ch);
+    text = (const unsigned char *)*ch;
+    for (i = 0; i <= len - n; )
+    {
+        if (MatchAt(text + i, pat + 1, n, matchCase)) { count++; i += n; }
+        else i++;
+    }
+    HUnlock((Handle)ch);
+    if (count == 0)
+        return 0;
+    newLen = (long)len + count * (long)(r - n);
+    if (newLen > kMdMaxFileBytes)
+        return -1;
+
+    out = NewHandle(newLen > 0 ? newLen : 1);
+    if (out == NULL)
+        return -1;
+    HLock(out);
+    o = *out;
+    HLock((Handle)ch);
+    text = (const unsigned char *)*ch;
+    for (i = 0; i < len; )
+    {
+        if (i <= len - n && MatchAt(text + i, pat + 1, n, matchCase))
+        {
+            BlockMoveData(repl + 1, o, r);
+            o += r;
+            i += n;
+        }
+        else
+            *o++ = text[i++];
+    }
+    HUnlock((Handle)ch);
+
+    DocBeforeAction(doc);   /* one undo step for the whole thing */
+    caret = (**te).selStart;
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    TESetText(*out, newLen, te);
+    HUnlock(out);
+    DisposeHandle(out);
+    doc->dirtyLineStart = doc->dirtyLineEnd = -1;
+    MdStyleAll(te, doc->styled);
+    if (caret > (short)newLen)
+        caret = (short)newLen;
+    TESetSelect(caret, caret, te);
+    doc->selAnchor = caret;
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+
+    DocMarkDirty(doc);
+    DocAdjustScrollbar(doc);
+    EraseRect(&doc->window->portRect);
+    InvalRect(&doc->window->portRect);
+    SetPort(savedPort);
+    return count;
+}

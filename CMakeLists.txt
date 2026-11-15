@@ -70,6 +70,7 @@ add_application(MacDown
     src/apple_events.c
     src/prefs.c
     src/winbounds.c
+    src/find.c
     resources/MacDown.r
     CREATOR MDED
 )

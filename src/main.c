@@ -21,6 +21,7 @@
 #include "apple_events.h"
 #include "prefs.h"
 #include "pstr.h"
+#include "find.h"
 
 #define kMenuBarID 128
 #define kAppleMenuID 128
@@ -53,7 +54,10 @@
 #define kEditClear 6
 #define kEditSelAll 7
 #define kEditDuplicate 9
-#define kEditPreferences 11
+#define kEditFind 11
+#define kEditFindAgain 12
+#define kEditReplaceFind 13
+#define kEditPreferences 15
 
 #define kPrefsDLOG 133
 /* DITL 133 items. The pop-ups are user items drawn and tracked here
@@ -712,6 +716,8 @@ static void HandleMouse(EventRecord *ev)
         else if (gPrefsDlg != NULL && w == (WindowPtr)gPrefsDlg
                  && TrackGoAway(w, ev->where))
             PrefsWindowClose();
+        else if (FindIsWindow(w) && TrackGoAway(w, ev->where))
+            FindWindowClose();
         break;
     case inZoomIn:
     case inZoomOut:
@@ -870,6 +876,11 @@ static void HandleKey(EventRecord *ev)
     if (cmd && (c == 'w' || c == 'W') && PrefsWindowIsFront())
     {
         PrefsWindowClose();
+        return;
+    }
+    if (cmd && (c == 'w' || c == 'W') && FindWindowIsFront())
+    {
+        FindWindowClose();
         return;
     }
 
@@ -1561,6 +1572,20 @@ static void AdjustMenus(void)
 
     SyncFileMenuEnables();
 
+    {
+        MenuHandle edit = GetMenuHandle(kEditMenuID);
+        if (FindHasPattern() && DocFrontmost() != NULL)
+        {
+            EnableItem(edit, kEditFindAgain);
+            EnableItem(edit, kEditReplaceFind);
+        }
+        else
+        {
+            DisableItem(edit, kEditFindAgain);
+            DisableItem(edit, kEditReplaceFind);
+        }
+    }
+
     /* Check the front document's line endings; nothing to check (or
        change) when the front window isn't a document. */
     for (i = kFormatLEFirst; i <= kFormatLELast; i++)
@@ -1636,6 +1661,55 @@ static void HandleMenu(long mResult)
         if (item == kEditPreferences)
         {
             DoPreferences();
+            break;
+        }
+        if (item == kEditFind)
+        {
+            FindShowWindow();
+            break;
+        }
+        if (item == kEditFindAgain)
+        {
+            FindAgain();
+            break;
+        }
+        if (item == kEditReplaceFind)
+        {
+            FindReplaceAndFindAgain();
+            break;
+        }
+        if (FindWindowIsFront())
+        {
+            /* Edit the Find window's text field, sharing the clipboard
+               with the documents. */
+            TEHandle fte = FindFieldTE();
+            if (fte == NULL)
+                break;
+            switch (item)
+            {
+            case kEditCut:
+                TECut(fte);
+                PublishTEScrap();
+                break;
+            case kEditCopy:
+                TECopy(fte);
+                PublishTEScrap();
+                break;
+            case kEditPaste:
+                SyncTEScrapFromDesk();
+                if ((**fte).teLength - ((**fte).selEnd - (**fte).selStart)
+                        + LMGetTEScrpLength() <= 255)
+                    TEPaste(fte);
+                else
+                    SysBeep(1);
+                break;
+            case kEditClear:
+                TEDelete(fte);
+                break;
+            case kEditSelAll:
+                TESetSelect(0, 32767, fte);
+                break;
+            }
             break;
         }
         if (SystemEdit(item - 1))
@@ -1800,7 +1874,7 @@ int main(void)
     while (!gQuitRequested)
     {
         if (WaitNextEvent(everyEvent, &event, sleepTicks, NULL)
-            && !HandlePrefsEvent(&event))
+            && !HandlePrefsEvent(&event) && !FindHandleEvent(&event))
         {
             switch (event.what)
             {
@@ -1863,6 +1937,7 @@ int main(void)
                 }
             }
             BrowserIdle();
+            FindIdle();
             DocAdjustCursor();
         }
     }

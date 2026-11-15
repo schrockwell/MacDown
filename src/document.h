@@ -67,6 +67,17 @@ Boolean DocRevert(DocState *doc);
    (Find, Preferences, Browser) is in front of it. NULL if none. */
 DocState *DocFrontmost(void);
 
+/* Edit > Find. DocFindNext selects the next match after the selection,
+   wrapping to the top; false if there's none. DocReplaceSelection
+   replaces the selection only if it is a match (one undo step).
+   DocReplaceAll returns the number replaced, or -1 if the result
+   wouldn't fit in TextEdit's 32K. */
+Boolean DocFindNext(DocState *doc, ConstStr255Param pat, Boolean matchCase);
+Boolean DocReplaceSelection(DocState *doc, ConstStr255Param pat,
+                            ConstStr255Param repl, Boolean matchCase);
+long    DocReplaceAll(DocState *doc, ConstStr255Param pat,
+                      ConstStr255Param repl, Boolean matchCase);
+
 /* Format > Mac/Unix/Windows: the line endings this document is saved
    with. Marks it dirty; undoable. */
 void DocSetLineEnding(DocState *doc, LineEndKind le);
