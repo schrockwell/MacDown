@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.9)
 project(MacDown C)
 
 # Single source of truth for the version number is /VERSION at the
-# project root. We parse it into MAJOR/MINOR/PATCH so we can also bake
-# the BCD bytes the 'vers' resource needs, then configure_file two
-# artifacts:
+# project root, in MAJOR.MINOR form (no patch number). We parse it so we
+# can also bake the BCD bytes the 'vers' resource needs, then
+# configure_file two artifacts:
 #   - ${CMAKE_BINARY_DIR}/version.r — included by resources/MacDown.r
 #   - MACDOWN_VERSION_STR compile-time #define — used by main.c
 # Bump the VERSION file and rebuild; everything else follows.
@@ -15,14 +15,21 @@ file(READ "${CMAKE_SOURCE_DIR}/VERSION" _MACDOWN_VERSION_RAW)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/VERSION")
 string(STRIP "${_MACDOWN_VERSION_RAW}" MACDOWN_VERSION)
-if(NOT MACDOWN_VERSION MATCHES "^([0-9])\\.([0-9])\\.([0-9])")
+# 'vers' packs the major version as one BCD byte (0-99) and the minor
+# version into one BCD nibble (0-9).
+if(NOT MACDOWN_VERSION MATCHES "^([0-9][0-9]?)\\.([0-9])$")
     message(FATAL_ERROR
-        "VERSION must be MAJOR.MINOR.PATCH with single-digit components "
-        "(BCD packing in 'vers' resource); got: '${MACDOWN_VERSION}'")
+        "VERSION must be MAJOR.MINOR (major 0-99, minor 0-9, for BCD "
+        "packing in the 'vers' resource); got: '${MACDOWN_VERSION}'")
 endif()
 set(MACDOWN_VER_MAJOR ${CMAKE_MATCH_1})
 set(MACDOWN_VER_MINOR ${CMAKE_MATCH_2})
-set(MACDOWN_VER_PATCH ${CMAKE_MATCH_3})
+# Two BCD digits for the major byte: 1 -> 01, 12 -> 12.
+if(MACDOWN_VER_MAJOR LESS 10)
+    set(MACDOWN_VER_MAJOR_BCD "0${MACDOWN_VER_MAJOR}")
+else()
+    set(MACDOWN_VER_MAJOR_BCD "${MACDOWN_VER_MAJOR}")
+endif()
 configure_file(
     ${CMAKE_SOURCE_DIR}/resources/version.r.in
     ${CMAKE_BINARY_DIR}/version.r
