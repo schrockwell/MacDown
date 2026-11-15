@@ -210,13 +210,16 @@ resource 'ALRT' (129, "Save Changes") {
 
 resource 'DITL' (129, "Save Changes") {
     {
-        { 72, 20, 92, 80 },
-        Button { enabled, "Yes" };
+        /* Item numbers are what DocPromptSaveIfDirty switches on:
+           1 Save (default, outlined by CautionAlert), 2 Don't Save,
+           3 Cancel. Laid out in the System 7 order. */
+        { 102, 224, 122, 304 },
+        Button { enabled, "Save" };
 
-        { 102, 20, 122, 80 },
-        Button { enabled, "No" };
+        { 102, 20, 122, 110 },
+        Button { enabled, "Don\0xD5t Save" };
 
-        { 102, 240, 122, 304 },
+        { 102, 140, 122, 210 },
         Button { enabled, "Cancel" };
 
         { 10, 72, 58, 304 },
