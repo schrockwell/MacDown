@@ -52,6 +52,7 @@ resource 'MENU' (129, "File") {
         "Close All",              noIcon, noKey,  noMark, plain;
         "Save",                   noIcon, "S",    noMark, plain;
         "Save As\0xC9",           noIcon, noKey,  noMark, plain;
+        "Revert to Saved",        noIcon, noKey,  noMark, plain;
         "-",                      noIcon, noKey,  noMark, plain;
         "Quit",                   noIcon, "Q",    noMark, plain;
     }
@@ -336,6 +337,35 @@ resource 'DITL' (131, "Delete?") {
         { 12, 64, 64, 308 },
         StaticText { disabled,
             "Permanently delete the ^1 \0xD2^0\0xD3?" };
+    }
+};
+
+/* ---- File > Revert to Saved confirmation. ^0 = file name. ---- */
+
+resource 'ALRT' (134, "Revert") {
+    { 80, 80, 190, 420 },
+    134,
+    {
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+        OK, visible, sound1;
+    },
+    centerMainScreen
+};
+
+resource 'DITL' (134, "Revert") {
+    {
+        { 76, 232, 96, 312 },
+        Button { enabled, "Revert" };
+
+        { 76, 132, 96, 212 },
+        Button { enabled, "Cancel" };
+
+        { 12, 64, 60, 312 },
+        StaticText { disabled,
+            "Revert to the saved version of \0xD2^0\0xD3? "
+            "Your changes will be lost." };
     }
 };
 

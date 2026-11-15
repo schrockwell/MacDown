@@ -60,6 +60,13 @@ Boolean DocCloseAll(void);                   /* prompt-and-close every doc; fals
    were open (window order) in prefs for session restore. */
 Boolean DocCloseAllForQuit(void);
 
+/* File > Revert to Saved: confirm, then reload the file from disk. */
+Boolean DocRevert(DocState *doc);
+
+/* The frontmost document window, even when a non-document window
+   (Find, Preferences, Browser) is in front of it. NULL if none. */
+DocState *DocFrontmost(void);
+
 /* Format > Mac/Unix/Windows: the line endings this document is saved
    with. Marks it dirty; undoable. */
 void DocSetLineEnding(DocState *doc, LineEndKind le);

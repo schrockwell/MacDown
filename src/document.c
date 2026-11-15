@@ -50,6 +50,8 @@ static Boolean gHaveNextBounds = false;
 #define kFileMenuCloseAll 6
 #define kFileMenuSave     7
 #define kFileMenuSaveAs   8
+#define kFileMenuRevert   9
+#define kRevertALRT       134
 #define kRecentMenuID 134
 #define kWindowsMenuID 132
 #define kWindowsMenuStaticItems 3 /* Next, Browser, separator */
@@ -190,6 +192,13 @@ void SyncFileMenuEnables(void)
         EnableItem(m, kFileMenuCloseAll);
     else
         DisableItem(m, kFileMenuCloseAll);
+    {
+        DocState *d = DocActive();
+        if (d != NULL && d->hasFile && d->dirty)
+            EnableItem(m, kFileMenuRevert);
+        else
+            DisableItem(m, kFileMenuRevert);
+    }
 }
 
 void BeginClipSuppress(ClipSuppress *cs, GrafPtr target)
@@ -473,7 +482,7 @@ Boolean DocClose(DocState *doc)
 
 /* The frontmost document window (document windows are always visible,
    so walking from FrontWindow covers them all). */
-static DocState *FrontmostDoc(void)
+DocState *DocFrontmost(void)
 {
     WindowPeek w = (WindowPeek)FrontWindow();
     while (w != NULL)
@@ -499,7 +508,7 @@ Boolean DocCloseAllForQuit(void)
     /* Front to back, so the save prompts come up in window order. Each
        doc is recorded after its prompt, so an untitled doc saved in
        response to "Save changes?" is remembered too. */
-    while ((doc = FrontmostDoc()) != NULL)
+    while ((doc = DocFrontmost()) != NULL)
     {
         if (!DocPromptSaveIfDirty(doc))
             return false;   /* quit cancelled: keep the old session */
@@ -2537,4 +2546,88 @@ void DocUndo(DocState *doc)
     }
     SetPort(savedPort);
     InvalRect(&doc->window->portRect);
+}
+
+/* ---- File > Revert to Saved ---- */
+
+Boolean DocRevert(DocState *doc)
+{
+    Handle data = NULL;
+    LineEndKind le;
+    long folded = 0, len;
+    OSErr err;
+    short topOffset;
+    long remainder;
+    Rect destR, viewR;
+    GrafPtr savedPort;
+    RgnHandle savedClip, emptyRgn;
+
+    if (doc == NULL || !doc->hasFile)
+        return false;
+
+    ParamText(doc->fileName, "\p", "\p", "\p");
+    InitCursor();
+    if (CautionAlert(kRevertALRT, NULL) != 1)
+        return false;
+
+    err = FileIOReadDoc(doc->vRefNum, doc->dirID, doc->fileName,
+                        &data, &le, &folded);
+    if (err != noErr)
+    {
+        ShowError(err == -1 ? kErrTooBig : kErrCantOpen);
+        return false;
+    }
+    len = GetHandleSize(data);
+    if (len > kMdMaxFileBytes)
+    {
+        DisposeHandle(data);
+        ShowError(kErrTooBig);
+        return false;
+    }
+
+    GetPort(&savedPort);
+    SetPort(doc->window);
+    savedClip = NewRgn();
+    emptyRgn = NewRgn();
+    GetClip(savedClip);
+    SetClip(emptyRgn);
+
+    /* Stay at about the same place in the text. */
+    topOffset = TopAnchor(doc, LineHeight(doc->te), &remainder);
+
+    HLock(data);
+    TESetText(*data, len, doc->te);
+    HUnlock(data);
+    DisposeHandle(data);
+
+    doc->leKind = le;
+    doc->dirty = false;
+    doc->dirtyLineStart = doc->dirtyLineEnd = -1;
+    DocClearUndo(doc);
+    doc->styled = (len < PrefsStyleLimitBytes());
+    MdStyleAll(doc->te, doc->styled);
+    TESetSelect(0, 0, doc->te);
+    doc->selAnchor = 0;
+
+    ComputeTERects(doc->window, &destR, &viewR);
+    (**doc->te).destRect = destR;
+    (**doc->te).viewRect = viewR;
+    TECalText(doc->te);
+    if (topOffset > (short)len)
+        topOffset = (short)len;
+    ScrollToAnchor(doc, topOffset, remainder);
+
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    DisposeRgn(emptyRgn);
+
+    DocUpdateTitle(doc);
+    DocAdjustScrollbar(doc);
+    EraseRect(&doc->window->portRect);
+    InvalRect(&doc->window->portRect);
+    SetPort(savedPort);
+
+    if (folded > 0)
+        ShowError(kErrFolded);
+    return true;
 }

@@ -41,7 +41,8 @@
 #define kFileCloseAll 6
 #define kFileSave 7
 #define kFileSaveAs 8
-#define kFileQuit 10
+#define kFileRevert 9
+#define kFileQuit 11
 
 #define kRecentMenuID 134
 
@@ -1620,6 +1621,10 @@ static void HandleMenu(long mResult)
         case kFileSaveAs:
             if (doc)
                 DocSaveAs(doc);
+            break;
+        case kFileRevert:
+            if (doc)
+                DocRevert(doc);
             break;
         case kFileQuit:
             HandleQuit();
