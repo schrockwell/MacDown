@@ -857,8 +857,9 @@ static void HandleKey(EventRecord *ev)
         break;
     }
 
-    /* Cmd-` cycles to the next window. Done before MenuKey because
-       the backtick isn't a real menu key equivalent. */
+    /* Cmd-` cycles to the next window. The Window menu shows it as the
+       item's key equivalent, but handle it here so Cmd-~ (Shift-`)
+       works too and the Window title doesn't flash on every cycle. */
     if (cmd && (c == '`' || c == '~'))
     {
         DocCycleWindow();

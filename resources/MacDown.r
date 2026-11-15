@@ -128,7 +128,7 @@ resource 'MENU' (132, "Window") {
     "Window",
     {
         "Browser",                    noIcon, "/",    noMark, plain;
-        "Next Window (Cmd-`)",        noIcon, noKey,  noMark, plain;
+        "Next Window",                noIcon, "`",    noMark, plain;
         "-",                          noIcon, noKey,  noMark, plain;
     }
 };
